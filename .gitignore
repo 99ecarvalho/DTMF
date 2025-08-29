@@ -1,0 +1,76 @@
+# Build directories
+build/*
+!build/.gitkeep
+docs/*
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+python_original/.venv/*
+venv/
+.env
+.venv/
+
+# VS Code specific
+.vscode-ctags
+.vscode/c_cpp_properties.json
+
+# Documentation (generated)
+docs/html/
+docs/latex/
+docs/*.tag
+
+# Doxygen output
+doxygen_output/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.DS_Store
+Thumbs.db
+
+# Core dumps
+core.*
+*.core
+
+# Log files
+*.log
+
+# Executable files (keep in build directory only)
+TKEFusionMain
+TKEFusionMock*
+
+# CMake generated files (outside build directory)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Object files
+*.o
+*.obj
+
+# Library files (static/shared)
+*.a
+*.so
+*.so.*
+*.dylib
+*.lib
+
+# IDE specific files
+.idea/
+*.swp
+*.swo
+
+# Backup files
+*.bak
+*.orig
+
+# Profiling data
+gmon.out
+
+# Address Sanitizer output
+*.asan
