@@ -1741,68 +1741,44 @@ static dtmf_result_t analyze_music_strategy(const audio_context_t *ctx,
     matrix_destroy(&eigenvectors);
     free(eigenvalues);
     
-    // Calculate MUSIC pseudospectrum for all DTMF frequencies
-    double pseudospectrum_values[8];
+    // Calculate MUSIC pseudospectrum for each DTMF frequency (separate low/high)
+    double low_pseudospectra[config->num_low_freqs];
+    double high_pseudospectra[config->num_high_freqs];
     
-    for (int i = 0; i < 8; i++) {
-        pseudospectrum_values[i] = music_pseudospectrum(&noise_subspace, 
-                                                      DTMF_TWIST_FREQS[i], 
-                                                      (double)ctx->sample_rate, 
-                                                      L);
+    // Initialize arrays to zero
+    for (size_t i = 0; i < config->num_low_freqs; i++) {
+        low_pseudospectra[i] = 0.0;
+    }
+    for (size_t i = 0; i < config->num_high_freqs; i++) {
+        high_pseudospectra[i] = 0.0;
+    }
+    
+    for (size_t i = 0; i < config->num_low_freqs; i++) {
+        low_pseudospectra[i] = music_pseudospectrum(&noise_subspace, 
+                                                   config->low_frequencies[i],
+                                                   (double)ctx->sample_rate, 
+                                                   L);
+    }
+    
+    for (size_t i = 0; i < config->num_high_freqs; i++) {
+        high_pseudospectra[i] = music_pseudospectrum(&noise_subspace, 
+                                                    config->high_frequencies[i],
+                                                    (double)ctx->sample_rate, 
+                                                    L);
     }
     
     matrix_destroy(&noise_subspace);
     
-    // Find peaks in pseudospectrum
-    double max_low = 0.0, max_high = 0.0;
-    int max_low_idx = -1, max_high_idx = -1;
+    // Find best tones using the existing helper functions
+    result->low_tone = find_maximum_tone(low_pseudospectra, config->low_frequencies, config->num_low_freqs);
+    result->high_tone = find_maximum_tone(high_pseudospectra, config->high_frequencies, config->num_high_freqs);
     
-    // Low frequencies (697, 770, 852, 941 Hz)
-    for (int i = 0; i < 4; i++) {
-        if (pseudospectrum_values[i] > max_low) {
-            max_low = pseudospectrum_values[i];
-            max_low_idx = i;
-        }
-    }
+    // Calculate confidence ratios
+    result->low_confidence = calculate_confidence_ratio(low_pseudospectra, config->num_low_freqs, result->low_tone.index);
+    result->high_confidence = calculate_confidence_ratio(high_pseudospectra, config->num_high_freqs, result->high_tone.index);
     
-    // High frequencies (1209, 1336, 1477, 1633 Hz)
-    for (int i = 4; i < 8; i++) {
-        if (pseudospectrum_values[i] > max_high) {
-            max_high = pseudospectrum_values[i];
-            max_high_idx = i;
-        }
-    }
-    
-    // Set detection results if both peaks found
-    if (max_low_idx >= 0 && max_high_idx >= 0) {
-        result->low_tone.index = max_low_idx;
-        result->low_tone.frequency = DTMF_TWIST_FREQS[max_low_idx];
-        result->low_tone.magnitude = max_low;
-        
-        result->high_tone.index = max_high_idx;
-        result->high_tone.frequency = DTMF_TWIST_FREQS[max_high_idx];
-        result->high_tone.magnitude = max_high;
-        
-        // Confidence is ratio of signal to noise pseudospectrum
-        double noise_level = 0.0;
-        for (int i = 0; i < 8; i++) {
-            if (i != max_low_idx && i != max_high_idx) {
-                noise_level += pseudospectrum_values[i];
-            }
-        }
-        noise_level /= 6.0; // Average of non-peak values
-        
-        if (noise_level > 0.0) {
-            result->low_confidence = max_low / noise_level;
-            result->high_confidence = max_high / noise_level;
-        } else {
-            result->low_confidence = max_low;
-            result->high_confidence = max_high;
-        }
-        
-        // Map to DTMF key
-        result->detected_key = map_dtmf_key(config, max_low_idx, max_high_idx);
-    }
+    // Map to DTMF key
+    result->detected_key = map_dtmf_key(config, result->low_tone.index, result->high_tone.index);
     
     free(windowed_samples);
     
