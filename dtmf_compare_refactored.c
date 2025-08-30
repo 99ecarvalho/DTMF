@@ -550,6 +550,155 @@ static char map_dtmf_key(const dtmf_config_t *config, int low_idx, int high_idx)
 }
 
 // =============================================================================
+// FILTER BANK + ENERGY DETECTION
+// =============================================================================
+
+typedef struct {
+    double *coeffs_b;  // Numerator coefficients
+    double *coeffs_a;  // Denominator coefficients  
+    double *delay_x;   // Input delay line
+    double *delay_y;   // Output delay line
+    int order;         // Filter order
+} iir_filter_t;
+
+static dtmf_result_t iir_filter_init(iir_filter_t *filter, int order) {
+    if (!filter || order <= 0) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    filter->order = order;
+    filter->coeffs_b = calloc(order + 1, sizeof(double));
+    filter->coeffs_a = calloc(order + 1, sizeof(double));
+    filter->delay_x = calloc(order + 1, sizeof(double));
+    filter->delay_y = calloc(order + 1, sizeof(double));
+    
+    if (!filter->coeffs_b || !filter->coeffs_a || !filter->delay_x || !filter->delay_y) {
+        free(filter->coeffs_b);
+        free(filter->coeffs_a);
+        free(filter->delay_x);
+        free(filter->delay_y);
+        return DTMF_ERROR_MEMORY;
+    }
+    
+    return DTMF_SUCCESS;
+}
+
+static void iir_filter_cleanup(iir_filter_t *filter) {
+    if (filter) {
+        free(filter->coeffs_b);
+        free(filter->coeffs_a);
+        free(filter->delay_x);
+        free(filter->delay_y);
+        memset(filter, 0, sizeof(iir_filter_t));
+    }
+}
+
+static dtmf_result_t design_bandpass_filter(iir_filter_t *filter, 
+                                           double center_freq, 
+                                           double bandwidth,
+                                           double sample_rate) {
+    if (!filter || center_freq <= 0 || bandwidth <= 0 || sample_rate <= 0) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    // Design 2nd order Butterworth bandpass filter
+    dtmf_result_t result = iir_filter_init(filter, 2);
+    if (result != DTMF_SUCCESS) {
+        return result;
+    }
+    
+    double omega = 2.0 * M_PI * center_freq / sample_rate;
+    double bw = 2.0 * M_PI * bandwidth / sample_rate;
+    
+    double r = 1.0 - 3.0 * bw;
+    double cosine = 2.0 * r * cos(omega) / (1.0 + r);
+    
+    // Coefficients for bandpass filter
+    filter->coeffs_b[0] = (1.0 - r) / 2.0;
+    filter->coeffs_b[1] = 0.0;
+    filter->coeffs_b[2] = -(1.0 - r) / 2.0;
+    
+    filter->coeffs_a[0] = 1.0;
+    filter->coeffs_a[1] = -cosine;
+    filter->coeffs_a[2] = r;
+    
+    return DTMF_SUCCESS;
+}
+
+static double iir_filter_process_sample(iir_filter_t *filter, double input) {
+    if (!filter) return 0.0;
+    
+    // Shift delay lines
+    for (int i = filter->order; i > 0; i--) {
+        filter->delay_x[i] = filter->delay_x[i-1];
+        filter->delay_y[i] = filter->delay_y[i-1];
+    }
+    
+    filter->delay_x[0] = input;
+    
+    // Calculate output
+    double output = 0.0;
+    
+    // Feed-forward (numerator)
+    for (int i = 0; i <= filter->order; i++) {
+        output += filter->coeffs_b[i] * filter->delay_x[i];
+    }
+    
+    // Feedback (denominator, skip a[0] which is 1.0)
+    for (int i = 1; i <= filter->order; i++) {
+        output -= filter->coeffs_a[i] * filter->delay_y[i];
+    }
+    
+    filter->delay_y[0] = output;
+    return output;
+}
+
+static double calculate_rms_energy(const double *samples, size_t count) {
+    if (!samples || count == 0) return 0.0;
+    
+    double sum_squares = 0.0;
+    for (size_t i = 0; i < count; i++) {
+        sum_squares += samples[i] * samples[i];
+    }
+    
+    return sqrt(sum_squares / count);
+}
+
+// =============================================================================
+// CORRELATION-BASED DETECTION
+// =============================================================================
+
+static double correlate_with_sinusoid(const int16_t *samples, 
+                                     size_t sample_count,
+                                     double frequency,
+                                     double sample_rate) {
+    if (!samples || sample_count == 0 || frequency <= 0 || sample_rate <= 0) {
+        return 0.0;
+    }
+    
+    double correlation = 0.0;
+    double omega = 2.0 * M_PI * frequency / sample_rate;
+    
+    // Calculate correlation with both sine and cosine components
+    double cos_corr = 0.0, sin_corr = 0.0;
+    
+    for (size_t i = 0; i < sample_count; i++) {
+        double phase = omega * i;
+        cos_corr += samples[i] * cos(phase);
+        sin_corr += samples[i] * sin(phase);
+    }
+    
+    // Normalize by sample count
+    cos_corr /= sample_count;
+    sin_corr /= sample_count;
+    
+    // Calculate magnitude of complex correlation
+    correlation = sqrt(cos_corr * cos_corr + sin_corr * sin_corr);
+    
+    return correlation;
+}
+
+// =============================================================================
 // GOERTZEL ALGORITHM
 // =============================================================================
 
@@ -725,6 +874,233 @@ static dtmf_result_t analyze_goertzel_strategy(const audio_context_t *ctx,
     return DTMF_SUCCESS;
 }
 
+static dtmf_result_t analyze_filterbank_strategy(const audio_context_t *ctx,
+                                               const dtmf_config_t *config,
+                                               const window_strategy_t *window_strategy,
+                                               dtmf_analysis_result_t *result) {
+    if (!ctx || !config || !window_strategy || !result) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    struct timespec wall_start, cpu_start;
+    dtmf_result_t timing_result = timing_start(&wall_start, &cpu_start);
+    if (timing_result != DTMF_SUCCESS) {
+        return timing_result;
+    }
+    
+    const double bandwidth = 50.0; // Hz, bandwidth for each bandpass filter
+    
+    // Create bandpass filters for each DTMF frequency
+    iir_filter_t low_filters[config->num_low_freqs];
+    iir_filter_t high_filters[config->num_high_freqs];
+    
+    // Initialize low frequency filters
+    for (size_t i = 0; i < config->num_low_freqs; i++) {
+        dtmf_result_t filter_result = design_bandpass_filter(&low_filters[i], 
+                                                           config->low_frequencies[i], 
+                                                           bandwidth, 
+                                                           ctx->sample_rate);
+        if (filter_result != DTMF_SUCCESS) {
+            // Cleanup any initialized filters
+            for (size_t j = 0; j < i; j++) {
+                iir_filter_cleanup(&low_filters[j]);
+            }
+            return filter_result;
+        }
+    }
+    
+    // Initialize high frequency filters
+    for (size_t i = 0; i < config->num_high_freqs; i++) {
+        dtmf_result_t filter_result = design_bandpass_filter(&high_filters[i], 
+                                                           config->high_frequencies[i], 
+                                                           bandwidth, 
+                                                           ctx->sample_rate);
+        if (filter_result != DTMF_SUCCESS) {
+            // Cleanup filters
+            for (size_t j = 0; j < config->num_low_freqs; j++) {
+                iir_filter_cleanup(&low_filters[j]);
+            }
+            for (size_t j = 0; j < i; j++) {
+                iir_filter_cleanup(&high_filters[j]);
+            }
+            return filter_result;
+        }
+    }
+    
+    // Allocate output buffers for filtered signals
+    double **low_filtered = malloc(config->num_low_freqs * sizeof(double*));
+    double **high_filtered = malloc(config->num_high_freqs * sizeof(double*));
+    
+    if (!low_filtered || !high_filtered) {
+        free(low_filtered);
+        free(high_filtered);
+        // Cleanup filters
+        for (size_t i = 0; i < config->num_low_freqs; i++) {
+            iir_filter_cleanup(&low_filters[i]);
+        }
+        for (size_t i = 0; i < config->num_high_freqs; i++) {
+            iir_filter_cleanup(&high_filters[i]);
+        }
+        return DTMF_ERROR_MEMORY;
+    }
+    
+    // Allocate memory for filtered signals
+    for (size_t i = 0; i < config->num_low_freqs; i++) {
+        low_filtered[i] = malloc(ctx->sample_count * sizeof(double));
+        if (!low_filtered[i]) {
+            // Cleanup
+            for (size_t j = 0; j < i; j++) {
+                free(low_filtered[j]);
+            }
+            free(low_filtered);
+            free(high_filtered);
+            for (size_t j = 0; j < config->num_low_freqs; j++) {
+                iir_filter_cleanup(&low_filters[j]);
+            }
+            for (size_t j = 0; j < config->num_high_freqs; j++) {
+                iir_filter_cleanup(&high_filters[j]);
+            }
+            return DTMF_ERROR_MEMORY;
+        }
+    }
+    
+    for (size_t i = 0; i < config->num_high_freqs; i++) {
+        high_filtered[i] = malloc(ctx->sample_count * sizeof(double));
+        if (!high_filtered[i]) {
+            // Cleanup
+            for (size_t j = 0; j < config->num_low_freqs; j++) {
+                free(low_filtered[j]);
+            }
+            for (size_t j = 0; j < i; j++) {
+                free(high_filtered[j]);
+            }
+            free(low_filtered);
+            free(high_filtered);
+            for (size_t j = 0; j < config->num_low_freqs; j++) {
+                iir_filter_cleanup(&low_filters[j]);
+            }
+            for (size_t j = 0; j < config->num_high_freqs; j++) {
+                iir_filter_cleanup(&high_filters[j]);
+            }
+            return DTMF_ERROR_MEMORY;
+        }
+    }
+    
+    // Process samples through all filters
+    for (size_t sample = 0; sample < ctx->sample_count; sample++) {
+        double input = (double)ctx->samples[sample];
+        
+        // Process through low frequency filters
+        for (size_t i = 0; i < config->num_low_freqs; i++) {
+            low_filtered[i][sample] = iir_filter_process_sample(&low_filters[i], input);
+        }
+        
+        // Process through high frequency filters
+        for (size_t i = 0; i < config->num_high_freqs; i++) {
+            high_filtered[i][sample] = iir_filter_process_sample(&high_filters[i], input);
+        }
+    }
+    
+    // Calculate RMS energy for each filtered signal
+    double low_energies[config->num_low_freqs];
+    double high_energies[config->num_high_freqs];
+    
+    // Initialize arrays to prevent uninitialized usage warnings
+    memset(low_energies, 0, sizeof(low_energies));
+    memset(high_energies, 0, sizeof(high_energies));
+    
+    for (size_t i = 0; i < config->num_low_freqs; i++) {
+        low_energies[i] = calculate_rms_energy(low_filtered[i], ctx->sample_count);
+    }
+    
+    for (size_t i = 0; i < config->num_high_freqs; i++) {
+        high_energies[i] = calculate_rms_energy(high_filtered[i], ctx->sample_count);
+    }
+    
+    // Find best tones
+    result->low_tone = find_maximum_tone(low_energies, config->low_frequencies, config->num_low_freqs);
+    result->high_tone = find_maximum_tone(high_energies, config->high_frequencies, config->num_high_freqs);
+    
+    // Calculate confidence ratios
+    result->low_confidence = calculate_confidence_ratio(low_energies, config->num_low_freqs, result->low_tone.index);
+    result->high_confidence = calculate_confidence_ratio(high_energies, config->num_high_freqs, result->high_tone.index);
+    
+    // Map to DTMF key
+    result->detected_key = map_dtmf_key(config, result->low_tone.index, result->high_tone.index);
+    
+    // Record window name
+    result->window_name = "Filter Bank";
+    
+    // Record timing
+    timing_end(&wall_start, &cpu_start, &result->timing);
+    
+    // Cleanup
+    for (size_t i = 0; i < config->num_low_freqs; i++) {
+        free(low_filtered[i]);
+        iir_filter_cleanup(&low_filters[i]);
+    }
+    for (size_t i = 0; i < config->num_high_freqs; i++) {
+        free(high_filtered[i]);
+        iir_filter_cleanup(&high_filters[i]);
+    }
+    free(low_filtered);
+    free(high_filtered);
+    
+    return DTMF_SUCCESS;
+}
+
+static dtmf_result_t analyze_correlation_strategy(const audio_context_t *ctx,
+                                                const dtmf_config_t *config,
+                                                const window_strategy_t *window_strategy,
+                                                dtmf_analysis_result_t *result) {
+    if (!ctx || !config || !window_strategy || !result) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    struct timespec wall_start, cpu_start;
+    dtmf_result_t timing_result = timing_start(&wall_start, &cpu_start);
+    if (timing_result != DTMF_SUCCESS) {
+        return timing_result;
+    }
+    
+    // Calculate correlation magnitudes for all DTMF frequencies
+    double low_correlations[config->num_low_freqs];
+    double high_correlations[config->num_high_freqs];
+    
+    // Initialize arrays to prevent uninitialized usage warnings
+    memset(low_correlations, 0, sizeof(low_correlations));
+    memset(high_correlations, 0, sizeof(high_correlations));
+    
+    for (size_t i = 0; i < config->num_low_freqs; i++) {
+        low_correlations[i] = correlate_with_sinusoid(ctx->samples, ctx->sample_count,
+                                                    config->low_frequencies[i], ctx->sample_rate);
+    }
+    
+    for (size_t i = 0; i < config->num_high_freqs; i++) {
+        high_correlations[i] = correlate_with_sinusoid(ctx->samples, ctx->sample_count,
+                                                     config->high_frequencies[i], ctx->sample_rate);
+    }
+    
+    // Find best tones
+    result->low_tone = find_maximum_tone(low_correlations, config->low_frequencies, config->num_low_freqs);
+    result->high_tone = find_maximum_tone(high_correlations, config->high_frequencies, config->num_high_freqs);
+    
+    // Calculate confidence ratios
+    result->low_confidence = calculate_confidence_ratio(low_correlations, config->num_low_freqs, result->low_tone.index);
+    result->high_confidence = calculate_confidence_ratio(high_correlations, config->num_high_freqs, result->high_tone.index);
+    
+    // Map to DTMF key
+    result->detected_key = map_dtmf_key(config, result->low_tone.index, result->high_tone.index);
+    
+    // Record window name
+    result->window_name = "Correlation";
+    
+    // Record timing
+    timing_end(&wall_start, &cpu_start, &result->timing);
+    
+    return DTMF_SUCCESS;
+}
+
 // =============================================================================
 // RESULT PRINTING
 // =============================================================================
@@ -833,7 +1209,9 @@ int main(int argc, char **argv) {
     
     analysis_strategy_t strategies[] = {
         {"FFT with Zero-Padding", analyze_fft_strategy},
-        {"Goertzel Algorithm", analyze_goertzel_strategy}
+        {"Goertzel Algorithm", analyze_goertzel_strategy},
+        {"Filter Bank + Energy Detection", analyze_filterbank_strategy},
+        {"Correlation-Based Detection", analyze_correlation_strategy}
     };
     
     const size_t num_strategies = sizeof(strategies) / sizeof(strategies[0]);
@@ -852,9 +1230,9 @@ int main(int argc, char **argv) {
         for (size_t w = 0; w < NUM_WINDOW_STRATEGIES; w++) {
             dtmf_analysis_result_t analysis_result = {0};
             
-            // For Goertzel, we only test with the first window (Rectangular/Raw) since 
-            // Goertzel works on raw samples, not windowed samples
-            if (i == 1 && w > 0) continue; // Skip non-raw windows for Goertzel
+            // For Goertzel, Filter Bank, and Correlation, we only test with the first window (Rectangular/Raw) 
+            // since these algorithms work on raw samples, not windowed samples
+            if ((i == 1 || i == 2 || i == 3) && w > 0) continue;
             
             dtmf_result_t status = strategies[i].analyze(ctx, &DEFAULT_DTMF_CONFIG, &WINDOW_STRATEGIES[w], &analysis_result);
             
