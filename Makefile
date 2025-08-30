@@ -1,5 +1,6 @@
 CC = gcc
 CFLAGS = -O2 -Wall -std=c99
+LDFLAGS = -lm
 BUILD_DIR = build
 
 # Source files
@@ -51,6 +52,35 @@ test-stream-stdin: $(DTMF_STREAM_TARGET)
 	@echo "Testing streaming version with stdin (first 10 frames):"
 	head -c 6400 data/5.pcm | ./$(DTMF_STREAM_TARGET)
 
+test-youtube: $(DTMF_STREAM_TARGET)
+	@echo "YouTube streaming test:"
+	@echo "Usage: make test-youtube YOUTUBE_URL='https://www.youtube.com/watch?v=VIDEO_ID'"
+	@echo "   Or: make test-youtube-cookies YOUTUBE_URL='URL' COOKIES_FILE='cookies.txt'"
+	@if [ -z "$(YOUTUBE_URL)" ]; then \
+		echo "Error: Please provide YOUTUBE_URL parameter"; \
+		echo "Example: make test-youtube YOUTUBE_URL='https://www.youtube.com/watch?v=dQw4w9WgXcQ'"; \
+		false; \
+	else \
+		echo "Streaming YouTube URL: $(YOUTUBE_URL)"; \
+		python3 youtube_stream.py "$(YOUTUBE_URL)" | ./$(DTMF_STREAM_TARGET); \
+	fi
+
+test-youtube-cookies: $(DTMF_STREAM_TARGET)
+	@echo "YouTube streaming test with cookies:"
+	@if [ -z "$(YOUTUBE_URL)" ]; then \
+		echo "Error: Please provide YOUTUBE_URL parameter"; \
+		echo "Example: make test-youtube-cookies YOUTUBE_URL='URL' COOKIES_FILE='cookies.txt'"; \
+		false; \
+	elif [ -z "$(COOKIES_FILE)" ]; then \
+		echo "Error: Please provide COOKIES_FILE parameter"; \
+		echo "Example: make test-youtube-cookies YOUTUBE_URL='URL' COOKIES_FILE='cookies.txt'"; \
+		false; \
+	else \
+		echo "Streaming YouTube URL: $(YOUTUBE_URL)"; \
+		echo "Using cookies file: $(COOKIES_FILE)"; \
+		python3 youtube_stream.py --cookies "$(COOKIES_FILE)" "$(YOUTUBE_URL)" | ./$(DTMF_STREAM_TARGET); \
+	fi
+
 test-enhanced: $(ENHANCED_TARGET)
 	@echo "Testing enhanced version with sample data/5.pcm:"
 	./$(ENHANCED_TARGET) data/5.pcm
@@ -82,6 +112,8 @@ help:
 	@echo "  enhanced       - Build enhanced version with windowing"
 	@echo "  test-*         - Test specific version"
 	@echo "  test-stream-stdin - Test streaming version with stdin"
+	@echo "  test-youtube   - Test YouTube streaming (requires YOUTUBE_URL parameter)"
+	@echo "  test-youtube-cookies - Test YouTube streaming with cookies (requires YOUTUBE_URL and COOKIES_FILE)"
 	@echo "  demo           - Run windowing demonstration"
 	@echo "  demo-stream    - Run streaming demonstration"
 	@echo "  clean          - Remove executables"
@@ -89,4 +121,4 @@ help:
 	@echo "  help           - Show this help message"
 
 # Phony targets
-.PHONY: all refactored stream enhanced test-refactored test-stream test-stream-stdin test-enhanced demo demo-stream clean clean-all help
+.PHONY: all refactored stream enhanced test-refactored test-stream test-stream-stdin test-youtube test-youtube-cookies test-enhanced demo demo-stream clean clean-all help

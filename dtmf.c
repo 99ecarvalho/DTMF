@@ -1,10 +1,10 @@
 /*
  * dtmf.c
  *
- * Refactored DTMF tone detection system with modular design.
+ * DTMF tone detection system with modular design.
  *
  * Usage:
- *   ./dtmf_compare <raw_pcm16_file> [sample_rate] [window_ms] [zero_pad_N]
+ *   ./dtmf <raw_pcm16_file> [sample_rate] [window_ms] [zero_pad_N]
  *
  * Key improvements:
  * - Modular design with clear separation of concerns
