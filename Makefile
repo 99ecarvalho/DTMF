@@ -1,11 +1,15 @@
 CC = gcc
 CFLAGS = -O2 -Wall -std=c99
-TARGET = dtmf_compare
+BUILD_DIR = build
+TARGET = $(BUILD_DIR)/dtmf_compare
 SRC = dtmf_compare.c
 
-all: $(TARGET)
+all: $(BUILD_DIR) $(TARGET)
 
-$(TARGET): $(SRC)
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+$(TARGET): $(SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $(TARGET) $(SRC) -lm
 
 clean:

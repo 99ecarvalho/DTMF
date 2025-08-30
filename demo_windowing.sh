@@ -8,9 +8,9 @@ echo "============================================================"
 echo
 
 # Check if enhanced executable exists
-if [[ ! -f "./dtmf_compare_enhanced" ]]; then
+if [[ ! -f "./build/dtmf_compare_enhanced" ]]; then
     echo "❌ Enhanced dtmf_compare_enhanced not found."
-    echo "Build with: gcc -O2 -Wall -std=c99 -o dtmf_compare_enhanced dtmf_compare_refactored.c -lm"
+    echo "Build with: make -f Makefile_updated"
     exit 1
 fi
 
@@ -27,7 +27,7 @@ echo "├─────────────┼─────────�
 for file in "${test_files[@]}"; do
     if [[ -f "data/$file" ]]; then
         # Extract detection results for each windowing method
-        results=$(./dtmf_compare_enhanced "data/$file" 2>/dev/null | grep -E "│ (Rectangular|Hamming|Hanning|Blackman|Raw)" | awk '{print $4}')
+        results=$(./build/dtmf_compare_enhanced "data/$file" 2>/dev/null | grep -E "│ (Rectangular|Hamming|Hanning|Blackman|Raw)" | awk '{print $4}')
         
         # Parse results into array
         result_array=($results)
@@ -61,7 +61,7 @@ echo "│ Method      │ Timing (ms) │ Accuracy    │"
 echo "├─────────────┼─────────────┼─────────────┤"
 
 # Extract timing information for performance comparison
-timing_info=$(./dtmf_compare_enhanced data/5.pcm 2>/dev/null | grep -E "│ (Rectangular|Hamming|Raw)" | awk '{print $4, $12}')
+timing_info=$(./build/dtmf_compare_enhanced data/5.pcm 2>/dev/null | grep -E "│ (Rectangular|Hamming|Raw)" | awk '{print $4, $12}')
 
 echo "│ Rectangular │    ~0.030   │ Variable    │"
 echo "│ Hamming     │    ~0.020   │ Good        │"  
@@ -80,6 +80,6 @@ echo "• High precision: Kaiser window with adjustable parameters"
 echo
 
 echo "🔍 Want detailed analysis? Run:"
-echo "  ./dtmf_compare_enhanced data/[sample].pcm"
+echo "  ./build/dtmf_compare_enhanced data/[sample].pcm"
 echo
 echo "✨ Enhancement completed successfully!"

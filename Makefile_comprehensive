@@ -1,0 +1,88 @@
+CC = gcc
+CFLAGS = -O2 -Wall -std=c99
+BUILD_DIR = build
+
+# Source files
+ORIGINAL_SRC = dtmf_compare.c
+REFACTORED_SRC = dtmf_compare_refactored.c
+
+# Target executables
+ORIGINAL_TARGET = $(BUILD_DIR)/dtmf_compare
+REFACTORED_TARGET = $(BUILD_DIR)/dtmf_compare_refactored
+ENHANCED_TARGET = $(BUILD_DIR)/dtmf_compare_enhanced
+
+# All targets
+ALL_TARGETS = $(ORIGINAL_TARGET) $(REFACTORED_TARGET) $(ENHANCED_TARGET)
+
+# Default target
+all: $(BUILD_DIR) $(ALL_TARGETS)
+
+# Create build directory
+$(BUILD_DIR):
+	@echo "Creating build directory..."
+	@mkdir -p $(BUILD_DIR)
+
+# Original version
+$(ORIGINAL_TARGET): $(ORIGINAL_SRC) | $(BUILD_DIR)
+	@echo "Building original DTMF analyzer..."
+	$(CC) $(CFLAGS) -o $@ $< -lm
+
+# Refactored version
+$(REFACTORED_TARGET): $(REFACTORED_SRC) | $(BUILD_DIR)
+	@echo "Building refactored DTMF analyzer..."
+	$(CC) $(CFLAGS) -o $@ $< -lm
+
+# Enhanced version (same source as refactored, different name for clarity)
+$(ENHANCED_TARGET): $(REFACTORED_SRC) | $(BUILD_DIR)
+	@echo "Building enhanced DTMF analyzer with windowing..."
+	$(CC) $(CFLAGS) -o $@ $< -lm
+
+# Individual targets
+original: $(BUILD_DIR) $(ORIGINAL_TARGET)
+
+refactored: $(BUILD_DIR) $(REFACTORED_TARGET)
+
+enhanced: $(BUILD_DIR) $(ENHANCED_TARGET)
+
+# Test targets
+test-original: $(ORIGINAL_TARGET)
+	@echo "Testing original version with sample data/5.pcm:"
+	./$(ORIGINAL_TARGET) data/5.pcm
+
+test-refactored: $(REFACTORED_TARGET)
+	@echo "Testing refactored version with sample data/5.pcm:"
+	./$(REFACTORED_TARGET) data/5.pcm
+
+test-enhanced: $(ENHANCED_TARGET)
+	@echo "Testing enhanced version with sample data/5.pcm:"
+	./$(ENHANCED_TARGET) data/5.pcm
+
+# Demonstration
+demo: $(ENHANCED_TARGET)
+	@echo "Running windowing demonstration:"
+	./demo_windowing.sh
+
+# Clean targets
+clean:
+	@echo "Cleaning build artifacts..."
+	rm -f $(ALL_TARGETS)
+
+clean-all: clean
+	@echo "Removing build directory..."
+	rm -rf $(BUILD_DIR)
+
+# Help target
+help:
+	@echo "Available targets:"
+	@echo "  all         - Build all versions (default)"
+	@echo "  original    - Build original version only"
+	@echo "  refactored  - Build refactored version only"
+	@echo "  enhanced    - Build enhanced version with windowing"
+	@echo "  test-*      - Test specific version"
+	@echo "  demo        - Run windowing demonstration"
+	@echo "  clean       - Remove executables"
+	@echo "  clean-all   - Remove build directory"
+	@echo "  help        - Show this help message"
+
+# Phony targets
+.PHONY: all original refactored enhanced test-original test-refactored test-enhanced demo clean clean-all help
