@@ -633,6 +633,10 @@ static dtmf_result_t analyze_fft_strategy(const audio_context_t *ctx,
     double low_magnitudes[config->num_low_freqs];
     double high_magnitudes[config->num_high_freqs];
     
+    // Initialize arrays to prevent uninitialized usage warnings
+    memset(low_magnitudes, 0, sizeof(low_magnitudes));
+    memset(high_magnitudes, 0, sizeof(high_magnitudes));
+    
     for (size_t i = 0; i < config->num_low_freqs; i++) {
         int bin = (int)round(config->low_frequencies[i] / freq_resolution);
         bin = (bin < 0) ? 0 : (bin >= half_size) ? half_size - 1 : bin;
@@ -687,6 +691,10 @@ static dtmf_result_t analyze_goertzel_strategy(const audio_context_t *ctx,
     double low_magnitudes[config->num_low_freqs];
     double high_magnitudes[config->num_high_freqs];
     
+    // Initialize arrays to prevent uninitialized usage warnings
+    memset(low_magnitudes, 0, sizeof(low_magnitudes));
+    memset(high_magnitudes, 0, sizeof(high_magnitudes));
+    
     for (size_t i = 0; i < config->num_low_freqs; i++) {
         low_magnitudes[i] = goertzel_magnitude(ctx->samples, ctx->sample_count,
                                              ctx->sample_rate, config->low_frequencies[i]);
@@ -720,6 +728,10 @@ static dtmf_result_t analyze_goertzel_strategy(const audio_context_t *ctx,
 // =============================================================================
 // RESULT PRINTING
 // =============================================================================
+
+static void print_analysis_results(const char *method_name,
+                                  const dtmf_analysis_result_t *result,
+                                  const dtmf_config_t *config) __attribute__((unused));
 
 static void print_analysis_results(const char *method_name,
                                   const dtmf_analysis_result_t *result,
