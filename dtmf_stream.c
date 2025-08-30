@@ -192,6 +192,17 @@ static inline bool is_power_of_two(int x) {
     return x > 0 && (x & (x - 1)) == 0;
 }
 
+// Find next power of two that is >= the given size
+static size_t find_power_of_two_for_size(size_t size) {
+    if (size <= 1) return 2;
+    
+    size_t power = 2;
+    while (power < size) {
+        power *= 2;
+    }
+    return power;
+}
+
 // =============================================================================
 // TIMING UTILITIES
 // =============================================================================
@@ -805,6 +816,41 @@ static double calculate_rms_energy(const double *samples, size_t count) {
     return sqrt(sum_squares / count);
 }
 
+// Calculate energy in a frequency band around a center frequency from FFT results
+static double calculate_frequency_band_energy(const complex_t *fft_buffer, 
+                                             size_t fft_size,
+                                             double center_freq,
+                                             double bandwidth,
+                                             double sample_rate) {
+    if (!fft_buffer || fft_size == 0 || center_freq <= 0 || sample_rate <= 0) {
+        return 0.0;
+    }
+    
+    double freq_resolution = sample_rate / (double)fft_size;
+    double half_bandwidth = bandwidth / 2.0;
+    
+    // Find the frequency bin range for the band
+    int center_bin = (int)round(center_freq / freq_resolution);
+    int bandwidth_bins = (int)round(half_bandwidth / freq_resolution);
+    
+    int start_bin = center_bin - bandwidth_bins;
+    int end_bin = center_bin + bandwidth_bins;
+    
+    // Clamp to valid range
+    if (start_bin < 0) start_bin = 0;
+    if (end_bin >= (int)(fft_size / 2)) end_bin = (int)(fft_size / 2) - 1;
+    
+    // Sum energy in the frequency band
+    double energy = 0.0;
+    for (int bin = start_bin; bin <= end_bin; bin++) {
+        double magnitude = sqrt(fft_buffer[bin].re * fft_buffer[bin].re + 
+                               fft_buffer[bin].im * fft_buffer[bin].im);
+        energy += magnitude;
+    }
+    
+    return energy;
+}
+
 // =============================================================================
 // CORRELATION-BASED DETECTION
 // =============================================================================
@@ -1327,16 +1373,18 @@ static dtmf_result_t analyze_goertzel_twist_strategy(const audio_context_t *ctx,
             
             result->detected_key = twist_result.digit;
             
-            // Calculate confidence ratios based on twist constraints and expected behavior
-            // Low confidence: based on energy ratio (how strong the signal is relative to total energy)
-            result->low_confidence = twist_result.energy_ratio * 100.0; // Scale energy ratio
+            // Calculate confidence ratios based on signal strength (energy ratio)
+            // Both confidence values now represent signal strength aspects, scaled like other algorithms
             
-            // High confidence: based on how close the twist is to the expected 6dB
-            // Expected twist is 6dB (high frequencies should be 6dB above low frequencies)
-            double expected_twist = 6.0;
-            double twist_error = fabs(twist_result.twist_db - expected_twist);
-            // Scale so that perfect 6dB twist gives confidence ~2.0, acceptable range gives >1.0
-            result->high_confidence = 2.0 * exp(-twist_error / 3.0); // Gaussian-like decay from ideal
+            // Use power ratios directly like other algorithms do
+            // Convert power to magnitude and scale appropriately
+            double low_mag = sqrt(twist_result.power_low);
+            double high_mag = sqrt(twist_result.power_high);
+            
+            // Scale to be similar to other algorithms (typically 1-20 range)
+            // Use a more dynamic scaling based on actual signal levels
+            result->low_confidence = fmax(1.0, low_mag / 10000.0);
+            result->high_confidence = fmax(1.0, high_mag / 10000.0);
             
         } else {
             // Fallback if mapping fails
@@ -1369,7 +1417,7 @@ static dtmf_result_t analyze_goertzel_twist_strategy(const audio_context_t *ctx,
     return DTMF_SUCCESS;
 }
 
-// FilterBank Algorithm (IIR bandpass filters + energy detection)
+// FilterBank Algorithm (FFT-based energy detection in frequency bands)
 static dtmf_result_t analyze_filterbank_strategy(const audio_context_t *ctx,
                                                 const dtmf_config_t *config,
                                                 const window_strategy_t *window_strategy,
@@ -1383,136 +1431,47 @@ static dtmf_result_t analyze_filterbank_strategy(const audio_context_t *ctx,
     if (timing_result != DTMF_SUCCESS) {
         return timing_result;
     }
+
+    // Use FFT-based frequency band energy detection instead of IIR filters
+    // This is more reliable and simpler than the problematic IIR filter design
     
-    const double bandwidth = 50.0; // Hz, bandwidth for each bandpass filter
-    
-    // Create bandpass filters for each DTMF frequency
-    iir_filter_t low_filters[config->num_low_freqs];
-    iir_filter_t high_filters[config->num_high_freqs];
-    
-    // Initialize low frequency filters
-    for (size_t i = 0; i < config->num_low_freqs; i++) {
-        dtmf_result_t filter_result = design_bandpass_filter(&low_filters[i], 
-                                                           config->low_frequencies[i], 
-                                                           bandwidth, 
-                                                           ctx->sample_rate);
-        if (filter_result != DTMF_SUCCESS) {
-            // Cleanup any initialized filters
-            for (size_t j = 0; j < i; j++) {
-                iir_filter_cleanup(&low_filters[j]);
-            }
-            return filter_result;
-        }
-    }
-    
-    // Initialize high frequency filters
-    for (size_t i = 0; i < config->num_high_freqs; i++) {
-        dtmf_result_t filter_result = design_bandpass_filter(&high_filters[i], 
-                                                           config->high_frequencies[i], 
-                                                           bandwidth, 
-                                                           ctx->sample_rate);
-        if (filter_result != DTMF_SUCCESS) {
-            // Cleanup filters
-            for (size_t j = 0; j < config->num_low_freqs; j++) {
-                iir_filter_cleanup(&low_filters[j]);
-            }
-            for (size_t j = 0; j < i; j++) {
-                iir_filter_cleanup(&high_filters[j]);
-            }
-            return filter_result;
-        }
-    }
-    
-    // Allocate output buffers for filtered signals
-    double **low_filtered = malloc(config->num_low_freqs * sizeof(double*));
-    double **high_filtered = malloc(config->num_high_freqs * sizeof(double*));
-    
-    if (!low_filtered || !high_filtered) {
-        free(low_filtered);
-        free(high_filtered);
-        // Cleanup filters
-        for (size_t i = 0; i < config->num_low_freqs; i++) {
-            iir_filter_cleanup(&low_filters[i]);
-        }
-        for (size_t i = 0; i < config->num_high_freqs; i++) {
-            iir_filter_cleanup(&high_filters[i]);
-        }
+    size_t fft_size = find_power_of_two_for_size(ctx->sample_count);
+    complex_t *fft_buffer = calloc(fft_size, sizeof(complex_t));
+    if (!fft_buffer) {
         return DTMF_ERROR_MEMORY;
     }
-    
-    // Allocate memory for filtered signals
-    for (size_t i = 0; i < config->num_low_freqs; i++) {
-        low_filtered[i] = malloc(ctx->sample_count * sizeof(double));
-        if (!low_filtered[i]) {
-            // Cleanup
-            for (size_t j = 0; j < i; j++) {
-                free(low_filtered[j]);
-            }
-            free(low_filtered);
-            free(high_filtered);
-            for (size_t j = 0; j < config->num_low_freqs; j++) {
-                iir_filter_cleanup(&low_filters[j]);
-            }
-            for (size_t j = 0; j < config->num_high_freqs; j++) {
-                iir_filter_cleanup(&high_filters[j]);
-            }
-            return DTMF_ERROR_MEMORY;
-        }
+
+    // Copy samples to FFT buffer (zero-padded if necessary)
+    for (size_t i = 0; i < ctx->sample_count && i < fft_size; i++) {
+        fft_buffer[i].re = (double)ctx->samples[i];
+        fft_buffer[i].im = 0.0;
     }
-    
-    for (size_t i = 0; i < config->num_high_freqs; i++) {
-        high_filtered[i] = malloc(ctx->sample_count * sizeof(double));
-        if (!high_filtered[i]) {
-            // Cleanup
-            for (size_t j = 0; j < config->num_low_freqs; j++) {
-                free(low_filtered[j]);
-            }
-            for (size_t j = 0; j < i; j++) {
-                free(high_filtered[j]);
-            }
-            free(low_filtered);
-            free(high_filtered);
-            for (size_t j = 0; j < config->num_low_freqs; j++) {
-                iir_filter_cleanup(&low_filters[j]);
-            }
-            for (size_t j = 0; j < config->num_high_freqs; j++) {
-                iir_filter_cleanup(&high_filters[j]);
-            }
-            return DTMF_ERROR_MEMORY;
-        }
+
+    // Perform FFT
+    dtmf_result_t fft_result = fft_radix2(fft_buffer, fft_size, false);
+    if (fft_result != DTMF_SUCCESS) {
+        free(fft_buffer);
+        return fft_result;
     }
-    
-    // Process samples through all filters
-    for (size_t sample = 0; sample < ctx->sample_count; sample++) {
-        double input = (double)ctx->samples[sample];
-        
-        // Process through low frequency filters
-        for (size_t i = 0; i < config->num_low_freqs; i++) {
-            low_filtered[i][sample] = iir_filter_process_sample(&low_filters[i], input);
-        }
-        
-        // Process through high frequency filters
-        for (size_t i = 0; i < config->num_high_freqs; i++) {
-            high_filtered[i][sample] = iir_filter_process_sample(&high_filters[i], input);
-        }
-    }
-    
-    // Calculate RMS energy for each filtered signal
+
+    // Calculate energy in frequency bands around each DTMF frequency
     double low_energies[config->num_low_freqs];
     double high_energies[config->num_high_freqs];
     
-    // Initialize arrays to prevent uninitialized usage warnings
-    memset(low_energies, 0, sizeof(low_energies));
-    memset(high_energies, 0, sizeof(high_energies));
+    const double bandwidth = 100.0; // Hz, energy integration bandwidth
     
     for (size_t i = 0; i < config->num_low_freqs; i++) {
-        low_energies[i] = calculate_rms_energy(low_filtered[i], ctx->sample_count);
+        low_energies[i] = calculate_frequency_band_energy(fft_buffer, fft_size, 
+                                                         config->low_frequencies[i], 
+                                                         bandwidth, ctx->sample_rate);
     }
     
     for (size_t i = 0; i < config->num_high_freqs; i++) {
-        high_energies[i] = calculate_rms_energy(high_filtered[i], ctx->sample_count);
+        high_energies[i] = calculate_frequency_band_energy(fft_buffer, fft_size, 
+                                                          config->high_frequencies[i], 
+                                                          bandwidth, ctx->sample_rate);
     }
-    
+
     // Find best tones
     result->low_tone = find_maximum_tone(low_energies, config->low_frequencies, config->num_low_freqs);
     result->high_tone = find_maximum_tone(high_energies, config->high_frequencies, config->num_high_freqs);
@@ -1527,20 +1486,10 @@ static dtmf_result_t analyze_filterbank_strategy(const audio_context_t *ctx,
     // Record window name
     result->window_name = "Filter Bank";
     
+    free(fft_buffer);
+    
     // Record timing
     timing_end(&wall_start, &cpu_start, &result->timing);
-    
-    // Cleanup
-    for (size_t i = 0; i < config->num_low_freqs; i++) {
-        free(low_filtered[i]);
-        iir_filter_cleanup(&low_filters[i]);
-    }
-    for (size_t i = 0; i < config->num_high_freqs; i++) {
-        free(high_filtered[i]);
-        iir_filter_cleanup(&high_filters[i]);
-    }
-    free(low_filtered);
-    free(high_filtered);
     
     return DTMF_SUCCESS;
 }
