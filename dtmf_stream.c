@@ -102,10 +102,21 @@ typedef struct {
     int fft_size;
 } audio_context_t;
 
+// Forward declarations for windowing
+typedef dtmf_result_t (*window_func_t)(const int16_t *input_samples,
+                                       size_t sample_count,
+                                       double **windowed_samples_out);
+
+typedef struct {
+    const char *name;
+    window_func_t apply;
+} window_strategy_t;
+
 // Forward declarations for analysis
 typedef dtmf_result_t (*dtmf_analysis_func_t)(
     const audio_context_t *ctx,
     const dtmf_config_t *config,
+    const window_strategy_t *window_strategy,
     dtmf_analysis_result_t *result
 );
 
@@ -228,6 +239,151 @@ static dtmf_result_t timing_end(const struct timespec *wall_start,
 }
 
 // =============================================================================
+// WINDOWING FUNCTIONS
+// =============================================================================
+
+static dtmf_result_t apply_hamming_window(const int16_t *input_samples, 
+                                          size_t sample_count,
+                                          double **windowed_samples_out) {
+    if (!input_samples || sample_count == 0 || !windowed_samples_out) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    double *windowed = malloc(sizeof(double) * sample_count);
+    if (!windowed) {
+        return DTMF_ERROR_MEMORY;
+    }
+    
+    for (size_t i = 0; i < sample_count; i++) {
+        double window_coeff = 0.54 - 0.46 * cos(2.0 * M_PI * i / (sample_count - 1));
+        windowed[i] = input_samples[i] * window_coeff;
+    }
+    
+    *windowed_samples_out = windowed;
+    return DTMF_SUCCESS;
+}
+
+static dtmf_result_t apply_hanning_window(const int16_t *input_samples,
+                                          size_t sample_count,
+                                          double **windowed_samples_out) {
+    if (!input_samples || sample_count == 0 || !windowed_samples_out) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    double *windowed = malloc(sizeof(double) * sample_count);
+    if (!windowed) {
+        return DTMF_ERROR_MEMORY;
+    }
+    
+    for (size_t i = 0; i < sample_count; i++) {
+        double window_coeff = 0.5 * (1.0 - cos(2.0 * M_PI * i / (sample_count - 1)));
+        windowed[i] = input_samples[i] * window_coeff;
+    }
+    
+    *windowed_samples_out = windowed;
+    return DTMF_SUCCESS;
+}
+
+static dtmf_result_t apply_blackman_window(const int16_t *input_samples,
+                                           size_t sample_count,
+                                           double **windowed_samples_out) {
+    if (!input_samples || sample_count == 0 || !windowed_samples_out) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    double *windowed = malloc(sizeof(double) * sample_count);
+    if (!windowed) {
+        return DTMF_ERROR_MEMORY;
+    }
+    
+    for (size_t i = 0; i < sample_count; i++) {
+        double window_coeff = 0.42 - 0.5 * cos(2.0 * M_PI * i / (sample_count - 1)) 
+                            + 0.08 * cos(4.0 * M_PI * i / (sample_count - 1));
+        windowed[i] = input_samples[i] * window_coeff;
+    }
+    
+    *windowed_samples_out = windowed;
+    return DTMF_SUCCESS;
+}
+
+static dtmf_result_t apply_kaiser_window(const int16_t *input_samples,
+                                         size_t sample_count,
+                                         double **windowed_samples_out) {
+    if (!input_samples || sample_count == 0 || !windowed_samples_out) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    double *windowed = malloc(sizeof(double) * sample_count);
+    if (!windowed) {
+        return DTMF_ERROR_MEMORY;
+    }
+    
+    // Kaiser window with beta = 5.0 (moderate sidelobe suppression)
+    const double beta = 5.0;
+    
+    // Modified Bessel function I0 approximation
+    double bessel_i0_beta = 1.0;
+    double term_beta = 1.0;
+    for (int i = 1; i < 50; i++) {
+        term_beta *= (beta * beta) / (4.0 * i * i);
+        bessel_i0_beta += term_beta;
+        if (term_beta < 1e-15) break;
+    }
+    
+    for (size_t i = 0; i < sample_count; i++) {
+        double n = (double)i - (sample_count - 1) / 2.0;
+        double arg_squared = beta * beta * (1.0 - pow(2.0 * n / (sample_count - 1), 2));
+        
+        // Calculate I0(arg) where arg = sqrt(arg_squared)
+        double bessel_i0_arg = 1.0;
+        double term_arg = 1.0;
+        for (int j = 1; j < 50; j++) {
+            term_arg *= arg_squared / (4.0 * j * j);
+            bessel_i0_arg += term_arg;
+            if (term_arg < 1e-15) break;
+        }
+        
+        double window_coeff = bessel_i0_arg / bessel_i0_beta;
+        windowed[i] = input_samples[i] * window_coeff;
+    }
+    
+    *windowed_samples_out = windowed;
+    return DTMF_SUCCESS;
+}
+
+static dtmf_result_t apply_rectangular_window(const int16_t *input_samples,
+                                              size_t sample_count,
+                                              double **windowed_samples_out) {
+    if (!input_samples || sample_count == 0 || !windowed_samples_out) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    double *windowed = malloc(sizeof(double) * sample_count);
+    if (!windowed) {
+        return DTMF_ERROR_MEMORY;
+    }
+    
+    // Rectangular window (no windowing - just convert to double)
+    for (size_t i = 0; i < sample_count; i++) {
+        windowed[i] = (double)input_samples[i];
+    }
+    
+    *windowed_samples_out = windowed;
+    return DTMF_SUCCESS;
+}
+
+// Window strategies array
+static const window_strategy_t WINDOW_STRATEGIES[] = {
+    {"Rectangular", apply_rectangular_window},
+    {"Hamming", apply_hamming_window},
+    {"Hanning", apply_hanning_window},
+    {"Blackman", apply_blackman_window},
+    {"Kaiser", apply_kaiser_window}
+};
+
+static const size_t NUM_WINDOW_STRATEGIES = sizeof(WINDOW_STRATEGIES) / sizeof(WINDOW_STRATEGIES[0]);
+
+// =============================================================================
 // TONE DETECTION UTILITIES
 // =============================================================================
 
@@ -330,11 +486,12 @@ static dtmf_result_t fft_radix2(complex_t *data, int n) {
 // ANALYSIS ALGORITHMS
 // =============================================================================
 
-// FFT-based analysis with zero-padding (using Rectangular window for streaming)
+// FFT-based analysis with windowing support
 static dtmf_result_t analyze_fft_strategy(const audio_context_t *ctx,
                                           const dtmf_config_t *config,
+                                          const window_strategy_t *window_strategy,
                                           dtmf_analysis_result_t *result) {
-    if (!ctx || !config || !result || !ctx->samples) {
+    if (!ctx || !config || !window_strategy || !result || !ctx->samples) {
         return DTMF_ERROR_INVALID_PARAM;
     }
     
@@ -343,21 +500,30 @@ static dtmf_result_t analyze_fft_strategy(const audio_context_t *ctx,
         return DTMF_ERROR_INVALID_PARAM;
     }
     
-    // Zero-pad samples to FFT size
+    // Apply selected windowing function
+    double *windowed_samples = NULL;
+    dtmf_result_t window_result = window_strategy->apply(ctx->samples, ctx->sample_count, &windowed_samples);
+    if (window_result != DTMF_SUCCESS) {
+        return window_result;
+    }
+    
+    // Zero-pad windowed samples to FFT size
     complex_t *fft_data = calloc(ctx->fft_size, sizeof(complex_t));
     if (!fft_data) {
+        free(windowed_samples);
         return DTMF_ERROR_MEMORY;
     }
     
-    // Copy samples with rectangular window (no windowing for streaming simplicity)
+    // Copy windowed samples to FFT buffer
     for (size_t i = 0; i < ctx->sample_count; i++) {
-        fft_data[i].re = ctx->samples[i];
+        fft_data[i].re = windowed_samples[i];
         fft_data[i].im = 0.0;
     }
     
     // Perform FFT
     dtmf_result_t fft_result = fft_radix2(fft_data, ctx->fft_size);
     if (fft_result != DTMF_SUCCESS) {
+        free(windowed_samples);
         free(fft_data);
         return fft_result;
     }
@@ -368,6 +534,10 @@ static dtmf_result_t analyze_fft_strategy(const audio_context_t *ctx,
     // Analyze low and high frequency groups
     double low_magnitudes[config->num_low_freqs];
     double high_magnitudes[config->num_high_freqs];
+    
+    // Initialize arrays to prevent uninitialized usage warnings
+    memset(low_magnitudes, 0, sizeof(low_magnitudes));
+    memset(high_magnitudes, 0, sizeof(high_magnitudes));
     
     // Find magnitudes for DTMF frequencies
     for (size_t i = 0; i < config->num_low_freqs; i++) {
@@ -399,8 +569,9 @@ static dtmf_result_t analyze_fft_strategy(const audio_context_t *ctx,
     // Map to DTMF key
     result->detected_key = map_dtmf_key(config, result->low_tone.index, result->high_tone.index);
     
-    result->window_name = "Rectangular";
+    result->window_name = window_strategy->name;
     
+    free(windowed_samples);
     free(fft_data);
     
     return timing_end(&wall_start, &cpu_start, &result->timing);
@@ -409,8 +580,9 @@ static dtmf_result_t analyze_fft_strategy(const audio_context_t *ctx,
 // Goertzel Algorithm
 static dtmf_result_t analyze_goertzel_strategy(const audio_context_t *ctx,
                                               const dtmf_config_t *config,
+                                              const window_strategy_t *window_strategy,
                                               dtmf_analysis_result_t *result) {
-    if (!ctx || !config || !result || !ctx->samples) {
+    if (!ctx || !config || !window_strategy || !result || !ctx->samples) {
         return DTMF_ERROR_INVALID_PARAM;
     }
     
@@ -421,6 +593,10 @@ static dtmf_result_t analyze_goertzel_strategy(const audio_context_t *ctx,
     
     double low_magnitudes[config->num_low_freqs];
     double high_magnitudes[config->num_high_freqs];
+    
+    // Initialize arrays to prevent uninitialized usage warnings
+    memset(low_magnitudes, 0, sizeof(low_magnitudes));
+    memset(high_magnitudes, 0, sizeof(high_magnitudes));
     
     // Process low frequencies
     for (size_t f = 0; f < config->num_low_freqs; f++) {
@@ -477,9 +653,10 @@ static dtmf_result_t analyze_goertzel_strategy(const audio_context_t *ctx,
 // Simplified Goertzel with Twist Check (basic implementation)
 static dtmf_result_t analyze_goertzel_twist_strategy(const audio_context_t *ctx,
                                                     const dtmf_config_t *config,
+                                                    const window_strategy_t *window_strategy,
                                                     dtmf_analysis_result_t *result) {
     // For streaming, we'll use the same Goertzel implementation but add basic twist validation
-    dtmf_result_t status = analyze_goertzel_strategy(ctx, config, result);
+    dtmf_result_t status = analyze_goertzel_strategy(ctx, config, window_strategy, result);
     if (status != DTMF_SUCCESS) return status;
     
     // Simple twist check: high tone should be within reasonable range of low tone
@@ -501,9 +678,10 @@ static dtmf_result_t analyze_goertzel_twist_strategy(const audio_context_t *ctx,
 // Simplified Filter Bank (energy detection based on Goertzel)
 static dtmf_result_t analyze_filterbank_strategy(const audio_context_t *ctx,
                                                 const dtmf_config_t *config,
+                                                const window_strategy_t *window_strategy,
                                                 dtmf_analysis_result_t *result) {
     // For simplicity in streaming, use Goertzel as the basis for filterbank
-    dtmf_result_t status = analyze_goertzel_strategy(ctx, config, result);
+    dtmf_result_t status = analyze_goertzel_strategy(ctx, config, window_strategy, result);
     if (status != DTMF_SUCCESS) return status;
     
     result->window_name = "FilterBank";
@@ -513,8 +691,9 @@ static dtmf_result_t analyze_filterbank_strategy(const audio_context_t *ctx,
 // Simplified Correlation-based (using normalized cross-correlation with reference tones)
 static dtmf_result_t analyze_correlation_strategy(const audio_context_t *ctx,
                                                  const dtmf_config_t *config,
+                                                 const window_strategy_t *window_strategy,
                                                  dtmf_analysis_result_t *result) {
-    if (!ctx || !config || !result || !ctx->samples) {
+    if (!ctx || !config || !window_strategy || !result || !ctx->samples) {
         return DTMF_ERROR_INVALID_PARAM;
     }
     
@@ -525,6 +704,10 @@ static dtmf_result_t analyze_correlation_strategy(const audio_context_t *ctx,
     
     double low_correlations[config->num_low_freqs];
     double high_correlations[config->num_high_freqs];
+    
+    // Initialize arrays to prevent uninitialized usage warnings
+    memset(low_correlations, 0, sizeof(low_correlations));
+    memset(high_correlations, 0, sizeof(high_correlations));
     
     // Generate reference tones and compute correlation
     for (size_t f = 0; f < config->num_low_freqs; f++) {
@@ -577,9 +760,10 @@ static dtmf_result_t analyze_correlation_strategy(const audio_context_t *ctx,
 // Simplified MUSIC Algorithm (using eigendecomposition approximation)
 static dtmf_result_t analyze_music_strategy(const audio_context_t *ctx,
                                            const dtmf_config_t *config,
+                                           const window_strategy_t *window_strategy,
                                            dtmf_analysis_result_t *result) {
     // For streaming simplicity, fall back to FFT-based approach as MUSIC is computationally intensive
-    dtmf_result_t status = analyze_fft_strategy(ctx, config, result);
+    dtmf_result_t status = analyze_fft_strategy(ctx, config, window_strategy, result);
     if (status != DTMF_SUCCESS) return status;
     
     result->window_name = "MUSIC";
@@ -644,30 +828,39 @@ static dtmf_result_t stream_read_frame(stream_context_t *stream_ctx) {
 static void print_header() {
     printf("# DTMF Stream Analysis Results\n");
     printf("# Frame: 40ms (320 samples @ 8kHz)\n");
-    printf("# Format: Multiple lines per timestamp, one line per algorithm\n");
-    printf("# Column widths optimized for up to 1 hour of audio (3600.000s)\n");
     printf("#\n");
-    printf("%-10s | %-15s | %-4s | %-8s %-8s | %-8s\n", 
-           "Timestamp", "Algorithm", "DTMF", "Low_Conf", "High_Conf", "Time_ms");
-    printf("%-10s-+-%-15s-+-%-4s-+-%-8s-%-8s-+-%-8s\n", 
-           "----------", "---------------", "----", "--------", "--------", "--------");
+    printf("%-10s | %-15s | %-11s | %-4s | %-8s %-8s | %-10s\n", 
+           "Timestamp", "Algorithm", "Window", "DTMF", "Low_Conf", "High_Conf", "Time_ms.us");
+    printf("%-10s-+-%-15s-+-%-11s-+-%-4s-+-%-8s-%-8s-+-%-10s\n", 
+           "----------", "---------------", "-----------", "----", "--------", "--------", "----------");
 }
 
-static void print_result_line(double timestamp, dtmf_analysis_result_t *results, int num_results) {
-    const char *algorithm_names[] = {
-        "FFT", "Goertzel", "GoertzelTwist", "FilterBank", "Correlation", "MUSIC"
-    };
+static void print_result_line(double timestamp, dtmf_analysis_result_t *results, int num_results, 
+                             const char **algorithm_names, const window_strategy_t **windows_used, int num_windows) {
+    int result_idx = 0;
     
     for (int i = 0; i < num_results; i++) {
-        double timing_ms = results[i].timing.wall_time_s * 1000.0;
-        
-        printf("%10.3f | %-15s | %-4c | %8.3f %8.3f | %8.3f\n", 
-               timestamp,
-               algorithm_names[i],
-               results[i].detected_key,
-               results[i].low_confidence,
-               results[i].high_confidence,
-               timing_ms);
+        for (int w = 0; w < num_windows; w++) {
+            // For FFT, show all windows; for others, only show first window (Rectangular)
+            if (i > 0 && w > 0) continue;
+            
+            if (result_idx < num_results * num_windows) {
+                double timing_us = results[result_idx].timing.wall_time_s * 1000000.0;
+                int ms = (int)(timing_us / 1000);
+                int us = (int)(timing_us) % 1000;
+                
+                printf("%10.3f | %-15s | %-11s | %-4c | %8.3f %8.3f | %5d.%03d\n", 
+                       timestamp,
+                       algorithm_names[i],
+                       (i == 0) ? windows_used[w]->name : "N/A",
+                       results[result_idx].detected_key,
+                       results[result_idx].low_confidence,
+                       results[result_idx].high_confidence,
+                       ms, us);
+                       
+                result_idx++;
+            }
+        }
     }
     
     // Add a blank line after each timestamp group for readability
@@ -716,6 +909,11 @@ int main(int argc, char **argv) {
     
     const size_t num_strategies = sizeof(strategies) / sizeof(strategies[0]);
     
+    // Algorithm names for output
+    const char *algorithm_names[] = {
+        "FFT", "Goertzel", "GoertzelTwist", "FilterBank", "Correlation", "MUSIC"
+    };
+    
     // Print header
     print_header();
     
@@ -725,22 +923,80 @@ int main(int argc, char **argv) {
         // Calculate timestamp for this frame
         double frame_timestamp = (stream_ctx.frame_count - 1) * FRAME_MS / 1000.0;
         
-        // Run all analysis strategies on this frame
-        dtmf_analysis_result_t results[num_strategies];
+        // Run analysis strategies with windowing variations
+        // FFT gets all windows, others only get rectangular (raw samples)
         
-        for (size_t i = 0; i < num_strategies; i++) {
-            dtmf_result_t status = strategies[i].analyze(&frame_ctx, &DEFAULT_DTMF_CONFIG, &results[i]);
-            
-            if (status != DTMF_SUCCESS) {
-                // Fill with error indicators
-                results[i].detected_key = '?';
-                results[i].low_confidence = 0.0;
-                results[i].high_confidence = 0.0;
-            }
+        // Calculate total number of results (FFT with 5 windows + 5 other algorithms)
+        int total_results = NUM_WINDOW_STRATEGIES + (num_strategies - 1);
+        dtmf_analysis_result_t *results = calloc(total_results, sizeof(dtmf_analysis_result_t));
+        if (!results) {
+            fprintf(stderr, "Memory allocation failed\n");
+            break;
         }
         
-        // Print consolidated results for this frame
-        print_result_line(frame_timestamp, results, num_strategies);
+        int result_idx = 0;
+        
+        // Run FFT with all windows
+        for (size_t w = 0; w < NUM_WINDOW_STRATEGIES; w++) {
+            dtmf_result_t status = strategies[0].analyze(&frame_ctx, &DEFAULT_DTMF_CONFIG, 
+                                                        &WINDOW_STRATEGIES[w], &results[result_idx]);
+            if (status != DTMF_SUCCESS) {
+                // Fill with error indicators
+                results[result_idx].detected_key = '?';
+                results[result_idx].low_confidence = 0.0;
+                results[result_idx].high_confidence = 0.0;
+                results[result_idx].window_name = WINDOW_STRATEGIES[w].name;
+            }
+            result_idx++;
+        }
+        
+        // Run other algorithms with rectangular window only
+        for (size_t i = 1; i < num_strategies; i++) {
+            dtmf_result_t status = strategies[i].analyze(&frame_ctx, &DEFAULT_DTMF_CONFIG,
+                                                        &WINDOW_STRATEGIES[0], &results[result_idx]);
+            if (status != DTMF_SUCCESS) {
+                // Fill with error indicators
+                results[result_idx].detected_key = '?';
+                results[result_idx].low_confidence = 0.0;
+                results[result_idx].high_confidence = 0.0;
+                results[result_idx].window_name = "N/A";
+            }
+            result_idx++;
+        }
+        
+        // Print results for this frame
+        for (int i = 0; i < total_results; i++) {
+            double timing_us = results[i].timing.wall_time_s * 1000000.0;  // Convert to microseconds
+            int ms = (int)(timing_us / 1000.0);  // Extract milliseconds
+            int us = (int)(timing_us) % 1000;    // Extract remaining microseconds
+            const char *algorithm_name;
+            const char *window_name;
+            
+            if (i < NUM_WINDOW_STRATEGIES) {
+                // FFT results
+                algorithm_name = "FFT";
+                window_name = WINDOW_STRATEGIES[i].name;
+            } else {
+                // Other algorithm results
+                algorithm_name = algorithm_names[i - NUM_WINDOW_STRATEGIES + 1];
+                window_name = "N/A";
+            }
+            
+            printf("%10.3f | %-15s | %-11s | %-4c | %8.3f %8.3f | %3d.%03d\n", 
+                   frame_timestamp,
+                   algorithm_name,
+                   window_name,
+                   results[i].detected_key,
+                   results[i].low_confidence,
+                   results[i].high_confidence,
+                   ms, us);
+        }
+        
+        // Add blank line after each frame
+        printf("\n");
+        fflush(stdout);
+        
+        free(results);
     }
     
     if (frame_result != DTMF_ERROR_END_OF_STREAM) {

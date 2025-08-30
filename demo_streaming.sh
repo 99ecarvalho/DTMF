@@ -46,8 +46,8 @@ echo "🎯 Testing with 5.pcm using original analyzer:"
 ./build/dtmf data/5.pcm | grep "Detected" | head -1
 
 echo
-echo "🎯 Testing with 5.pcm using streaming analyzer (first frame):"
-./build/dtmf_stream data/5.pcm | grep -E "^\s*0\.000" | head -3
+echo "🎯 Testing with 5.pcm using streaming analyzer (first frame, FFT only):"
+./build/dtmf_stream data/5.pcm | grep -E "^\s*0\.000.*FFT"
 
 echo
 echo "🌊 Streaming from stdin demonstration:"
@@ -60,10 +60,12 @@ echo "✅ Streaming analyzer features:"
 echo "   • Processes 40ms frames (320 samples @ 8kHz)"
 echo "   • Works with files or stdin streaming"
 echo "   • Low latency for real-time processing"
-echo "   • Multi-line format: one line per algorithm per frame"
+echo "   • Multi-line format: one line per algorithm/window combination"
 echo "   • Fixed column widths optimized for up to 1 hour"
 echo "   • Processing time tracking per algorithm"
+echo "   • FFT with 5 windowing functions: Rectangular, Hamming, Hanning, Blackman, Kaiser"
 echo "   • All 6 algorithms: FFT, Goertzel, Goertzel+Twist, FilterBank, Correlation, MUSIC"
+echo "   • Feature parity with original dtmf.c implementation"
 echo "   • Suitable for: arecord -f S16_LE -r 8000 -c 1 | ./dtmf_stream"
 echo
 
