@@ -1105,9 +1105,6 @@ static const char DTMF_TWIST_TABLE[4][4] = {
     {'*','0','#','D'}
 };
 
-// DTMF twist parameters
-static const double EXPECTED_TWIST_DB = 6.0;  // Expected twist: highs 6dB above lows
-
 // Helper function to find nearest Goertzel bin
 static int nearest_goertzel_bin(int N, int fs, double frequency) {
     double k_exact = (double)N * frequency / (double)fs;
