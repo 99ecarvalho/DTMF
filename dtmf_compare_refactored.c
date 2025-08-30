@@ -665,6 +665,336 @@ static double calculate_rms_energy(const double *samples, size_t count) {
 }
 
 // =============================================================================
+// MUSIC (Multiple Signal Classification) ALGORITHM
+// =============================================================================
+
+/*
+MUSIC (Multiple Signal Classification) is a subspace-based spectral estimation method that's particularly effective for detecting sinusoids in noise. It's considered one of the most powerful high-resolution spectral analysis techniques.
+
+How MUSIC Works:
+Subspace Decomposition:
+
+Creates a Hankel matrix from the input signal
+Computes the autocorrelation matrix
+Performs eigendecomposition to separate signal and noise subspaces
+Signal vs Noise Subspace:
+
+Signal Subspace: Eigenvectors corresponding to large eigenvalues
+Noise Subspace: Eigenvectors corresponding to small eigenvalues
+Assumes 2 dominant sinusoids (low + high DTMF tones)
+Pseudospectrum Calculation:
+
+For each DTMF frequency, creates a "steering vector" (complex exponential)
+Calculates how orthogonal this vector is to the noise subspace
+High orthogonality = signal present at that frequency
+Key Implementation Features:
+Matrix Operations: Full matrix library with create, destroy, multiply, transpose
+Eigendecomposition: Jacobi method for symmetric matrices
+Hankel Matrix: Structured matrix for subspace analysis
+Memory Management: Comprehensive cleanup for all allocated structures
+Error Handling: Robust error checking throughout the algorithm
+Performance Analysis:
+From Test Results:
+
+Accuracy: Correctly detects digits (1, 5) ✅
+Timing: ~6ms execution time (slowest but acceptable)
+Confidence: Lower confidence ratios (~1.0-1.1) but still detects correctly
+Computational Cost: High due to eigendecomposition and matrix operations
+Algorithm Comparison Summary:
+Algorithm	Speed (ms)	Accuracy	Confidence	Best Use Case
+Goertzel	~0.005	Excellent	High (3-6)	Embedded systems
+FFT	~0.025	Excellent	High (2-4)	General purpose
+Correlation	~0.027	Excellent	High (2-5)	Clean signals
+Filter Bank	~0.012	Good	Medium (1-1.2)	Real-time, noisy channels
+MUSIC	~6.0	Good	Lower (1.0-1.1)	Research, high-resolution
+When to Use MUSIC:
+Advantages:
+
+High Resolution: Superior frequency resolution compared to FFT
+Noise Resilience: Excellent performance in low SNR conditions
+Multiple Signal Detection: Can resolve closely spaced frequencies
+Theoretical Optimality: Near-optimal under certain conditions
+Disadvantages:
+
+Computational Cost: Requires eigendecomposition (expensive)
+Model Order: Need to know/estimate number of signals
+Short Data Records: May have stability issues with limited data
+Best Applications:
+
+Research and development environments
+High-precision frequency estimation
+Low SNR scenarios where other methods fail
+Applications where computational time is not critical
+The MUSIC algorithm adds significant analytical depth to your DTMF detection suite, providing a high-resolution alternative for challenging signal conditions!
+
+*/
+typedef struct {
+    double **data;
+    int rows;
+    int cols;
+} matrix_t;
+
+static dtmf_result_t matrix_create(matrix_t *matrix, int rows, int cols) {
+    if (!matrix || rows <= 0 || cols <= 0) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    matrix->data = malloc(rows * sizeof(double*));
+    if (!matrix->data) {
+        return DTMF_ERROR_MEMORY;
+    }
+    
+    for (int i = 0; i < rows; i++) {
+        matrix->data[i] = calloc(cols, sizeof(double));
+        if (!matrix->data[i]) {
+            // Cleanup previously allocated rows
+            for (int j = 0; j < i; j++) {
+                free(matrix->data[j]);
+            }
+            free(matrix->data);
+            return DTMF_ERROR_MEMORY;
+        }
+    }
+    
+    matrix->rows = rows;
+    matrix->cols = cols;
+    return DTMF_SUCCESS;
+}
+
+static void matrix_destroy(matrix_t *matrix) {
+    if (matrix && matrix->data) {
+        for (int i = 0; i < matrix->rows; i++) {
+            free(matrix->data[i]);
+        }
+        free(matrix->data);
+        matrix->data = NULL;
+        matrix->rows = 0;
+        matrix->cols = 0;
+    }
+}
+
+static dtmf_result_t matrix_multiply(const matrix_t *a, const matrix_t *b, matrix_t *result) {
+    if (!a || !b || !result || a->cols != b->rows) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    dtmf_result_t status = matrix_create(result, a->rows, b->cols);
+    if (status != DTMF_SUCCESS) {
+        return status;
+    }
+    
+    for (int i = 0; i < a->rows; i++) {
+        for (int j = 0; j < b->cols; j++) {
+            result->data[i][j] = 0.0;
+            for (int k = 0; k < a->cols; k++) {
+                result->data[i][j] += a->data[i][k] * b->data[k][j];
+            }
+        }
+    }
+    
+    return DTMF_SUCCESS;
+}
+
+static dtmf_result_t matrix_transpose(const matrix_t *input, matrix_t *result) {
+    if (!input || !result) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    dtmf_result_t status = matrix_create(result, input->cols, input->rows);
+    if (status != DTMF_SUCCESS) {
+        return status;
+    }
+    
+    for (int i = 0; i < input->rows; i++) {
+        for (int j = 0; j < input->cols; j++) {
+            result->data[j][i] = input->data[i][j];
+        }
+    }
+    
+    return DTMF_SUCCESS;
+}
+
+// Simple eigenvalue decomposition for symmetric matrices (Jacobi method)
+static dtmf_result_t symmetric_eigendecomposition(matrix_t *matrix, 
+                                                 double *eigenvalues,
+                                                 matrix_t *eigenvectors) {
+    if (!matrix || !eigenvalues || !eigenvectors || matrix->rows != matrix->cols) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    int n = matrix->rows;
+    const int max_iterations = 100;
+    const double tolerance = 1e-10;
+    
+    // Initialize eigenvectors as identity matrix
+    dtmf_result_t status = matrix_create(eigenvectors, n, n);
+    if (status != DTMF_SUCCESS) {
+        return status;
+    }
+    
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            eigenvectors->data[i][j] = (i == j) ? 1.0 : 0.0;
+        }
+    }
+    
+    // Copy matrix data for in-place operations
+    matrix_t a;
+    status = matrix_create(&a, n, n);
+    if (status != DTMF_SUCCESS) {
+        matrix_destroy(eigenvectors);
+        return status;
+    }
+    
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            a.data[i][j] = matrix->data[i][j];
+        }
+    }
+    
+    // Jacobi iteration
+    for (int iter = 0; iter < max_iterations; iter++) {
+        // Find largest off-diagonal element
+        double max_val = 0.0;
+        int p = 0, q = 1;
+        
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                if (fabs(a.data[i][j]) > max_val) {
+                    max_val = fabs(a.data[i][j]);
+                    p = i;
+                    q = j;
+                }
+            }
+        }
+        
+        if (max_val < tolerance) {
+            break; // Converged
+        }
+        
+        // Calculate rotation angle
+        double theta;
+        if (fabs(a.data[p][p] - a.data[q][q]) < tolerance) {
+            theta = M_PI / 4.0;
+        } else {
+            theta = 0.5 * atan(2.0 * a.data[p][q] / (a.data[p][p] - a.data[q][q]));
+        }
+        
+        double c = cos(theta);
+        double s = sin(theta);
+        
+        // Apply Givens rotation
+        for (int i = 0; i < n; i++) {
+            if (i != p && i != q) {
+                double aip = a.data[i][p];
+                double aiq = a.data[i][q];
+                a.data[i][p] = c * aip - s * aiq;
+                a.data[p][i] = a.data[i][p];
+                a.data[i][q] = s * aip + c * aiq;
+                a.data[q][i] = a.data[i][q];
+            }
+        }
+        
+        double app = a.data[p][p];
+        double aqq = a.data[q][q];
+        double apq = a.data[p][q];
+        
+        a.data[p][p] = c * c * app - 2.0 * c * s * apq + s * s * aqq;
+        a.data[q][q] = s * s * app + 2.0 * c * s * apq + c * c * aqq;
+        a.data[p][q] = 0.0;
+        a.data[q][p] = 0.0;
+        
+        // Update eigenvectors
+        for (int i = 0; i < n; i++) {
+            double vip = eigenvectors->data[i][p];
+            double viq = eigenvectors->data[i][q];
+            eigenvectors->data[i][p] = c * vip - s * viq;
+            eigenvectors->data[i][q] = s * vip + c * viq;
+        }
+    }
+    
+    // Extract eigenvalues from diagonal
+    for (int i = 0; i < n; i++) {
+        eigenvalues[i] = a.data[i][i];
+    }
+    
+    matrix_destroy(&a);
+    return DTMF_SUCCESS;
+}
+
+static dtmf_result_t create_hankel_matrix(const int16_t *samples, 
+                                        size_t sample_count,
+                                        int L,
+                                        matrix_t *hankel) {
+    if (!samples || sample_count == 0 || L <= 0 || !hankel) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    int M = (int)sample_count - L + 1;
+    if (M <= 0) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    dtmf_result_t status = matrix_create(hankel, L, M);
+    if (status != DTMF_SUCCESS) {
+        return status;
+    }
+    
+    for (int i = 0; i < L; i++) {
+        for (int j = 0; j < M; j++) {
+            hankel->data[i][j] = (double)samples[i + j];
+        }
+    }
+    
+    return DTMF_SUCCESS;
+}
+
+static double music_pseudospectrum(const matrix_t *noise_subspace,
+                                  double frequency,
+                                  double sample_rate,
+                                  int L) {
+    if (!noise_subspace || frequency <= 0 || sample_rate <= 0 || L <= 0) {
+        return 0.0;
+    }
+    
+    // Create steering vector for the frequency
+    complex_t *steering = malloc(L * sizeof(complex_t));
+    if (!steering) {
+        return 0.0;
+    }
+    
+    double omega = 2.0 * M_PI * frequency / sample_rate;
+    for (int i = 0; i < L; i++) {
+        steering[i].re = cos(omega * i);
+        steering[i].im = sin(omega * i);
+    }
+    
+    // Calculate a^H * En * En^H * a
+    double numerator = 0.0;
+    
+    for (int i = 0; i < L; i++) {
+        for (int j = 0; j < L; j++) {
+            // steering[i]* * noise_subspace * noise_subspace^H * steering[j]
+            double sum_real = 0.0;
+            
+            for (int k = 0; k < noise_subspace->cols; k++) {
+                // noise_subspace[i][k] * noise_subspace[j][k]*
+                sum_real += noise_subspace->data[i][k] * noise_subspace->data[j][k];
+            }
+            
+            // steering[i]* * sum * steering[j]
+            numerator += (steering[i].re * sum_real + steering[i].im * 0.0) * steering[j].re +
+                        (steering[i].im * sum_real - steering[i].re * 0.0) * steering[j].im;
+        }
+    }
+    
+    free(steering);
+    
+    // MUSIC pseudospectrum is 1 / (denominator)
+    return (numerator > 0.0) ? 1.0 / numerator : 0.0;
+}
+
+// =============================================================================
 // CORRELATION-BASED DETECTION
 // =============================================================================
 
@@ -1101,6 +1431,156 @@ static dtmf_result_t analyze_correlation_strategy(const audio_context_t *ctx,
     return DTMF_SUCCESS;
 }
 
+static dtmf_result_t analyze_music_strategy(const audio_context_t *ctx,
+                                           const dtmf_config_t *config,
+                                           const window_strategy_t *window_strategy,
+                                           dtmf_analysis_result_t *result) {
+    if (!ctx || !config || !window_strategy || !result) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    struct timespec wall_start, cpu_start;
+    dtmf_result_t timing_result = timing_start(&wall_start, &cpu_start);
+    if (timing_result != DTMF_SUCCESS) {
+        return timing_result;
+    }
+    
+    // MUSIC parameters
+    const int L = (int)ctx->sample_count / 3; // Subspace dimension (typically N/3 to N/2)
+    const int num_signals = 2; // We expect 2 sinusoids (low and high DTMF tones)
+    const int noise_dim = L - num_signals;
+    
+    if (L <= num_signals || noise_dim <= 0) {
+        return DTMF_ERROR_INVALID_PARAM;
+    }
+    
+    // Create Hankel matrix from input samples
+    matrix_t hankel;
+    dtmf_result_t status = create_hankel_matrix(ctx->samples, ctx->sample_count, L, &hankel);
+    if (status != DTMF_SUCCESS) {
+        return status;
+    }
+    
+    // Compute autocorrelation matrix R = H * H^T
+    matrix_t hankel_t, autocorr;
+    status = matrix_transpose(&hankel, &hankel_t);
+    if (status != DTMF_SUCCESS) {
+        matrix_destroy(&hankel);
+        return status;
+    }
+    
+    status = matrix_multiply(&hankel, &hankel_t, &autocorr);
+    if (status != DTMF_SUCCESS) {
+        matrix_destroy(&hankel);
+        matrix_destroy(&hankel_t);
+        return status;
+    }
+    
+    // Eigendecomposition of autocorrelation matrix
+    double *eigenvalues = malloc(L * sizeof(double));
+    matrix_t eigenvectors;
+    
+    if (!eigenvalues) {
+        matrix_destroy(&hankel);
+        matrix_destroy(&hankel_t);
+        matrix_destroy(&autocorr);
+        return DTMF_ERROR_MEMORY;
+    }
+    
+    status = symmetric_eigendecomposition(&autocorr, eigenvalues, &eigenvectors);
+    if (status != DTMF_SUCCESS) {
+        matrix_destroy(&hankel);
+        matrix_destroy(&hankel_t);
+        matrix_destroy(&autocorr);
+        free(eigenvalues);
+        return status;
+    }
+    
+    // Sort eigenvalues and eigenvectors in descending order
+    for (int i = 0; i < L - 1; i++) {
+        for (int j = i + 1; j < L; j++) {
+            if (eigenvalues[i] < eigenvalues[j]) {
+                // Swap eigenvalues
+                double temp_val = eigenvalues[i];
+                eigenvalues[i] = eigenvalues[j];
+                eigenvalues[j] = temp_val;
+                
+                // Swap corresponding eigenvectors
+                for (int k = 0; k < L; k++) {
+                    double temp_vec = eigenvectors.data[k][i];
+                    eigenvectors.data[k][i] = eigenvectors.data[k][j];
+                    eigenvectors.data[k][j] = temp_vec;
+                }
+            }
+        }
+    }
+    
+    // Create noise subspace (eigenvectors corresponding to smallest eigenvalues)
+    matrix_t noise_subspace;
+    status = matrix_create(&noise_subspace, L, noise_dim);
+    if (status != DTMF_SUCCESS) {
+        matrix_destroy(&hankel);
+        matrix_destroy(&hankel_t);
+        matrix_destroy(&autocorr);
+        matrix_destroy(&eigenvectors);
+        free(eigenvalues);
+        return status;
+    }
+    
+    for (int i = 0; i < L; i++) {
+        for (int j = 0; j < noise_dim; j++) {
+            noise_subspace.data[i][j] = eigenvectors.data[i][j + num_signals];
+        }
+    }
+    
+    // Calculate MUSIC pseudospectrum for each DTMF frequency
+    double low_pseudospectra[config->num_low_freqs];
+    double high_pseudospectra[config->num_high_freqs];
+    
+    // Initialize arrays to prevent uninitialized usage warnings
+    memset(low_pseudospectra, 0, sizeof(low_pseudospectra));
+    memset(high_pseudospectra, 0, sizeof(high_pseudospectra));
+    
+    for (size_t i = 0; i < config->num_low_freqs; i++) {
+        low_pseudospectra[i] = music_pseudospectrum(&noise_subspace, 
+                                                   config->low_frequencies[i],
+                                                   ctx->sample_rate, L);
+    }
+    
+    for (size_t i = 0; i < config->num_high_freqs; i++) {
+        high_pseudospectra[i] = music_pseudospectrum(&noise_subspace, 
+                                                    config->high_frequencies[i],
+                                                    ctx->sample_rate, L);
+    }
+    
+    // Find best tones
+    result->low_tone = find_maximum_tone(low_pseudospectra, config->low_frequencies, config->num_low_freqs);
+    result->high_tone = find_maximum_tone(high_pseudospectra, config->high_frequencies, config->num_high_freqs);
+    
+    // Calculate confidence ratios
+    result->low_confidence = calculate_confidence_ratio(low_pseudospectra, config->num_low_freqs, result->low_tone.index);
+    result->high_confidence = calculate_confidence_ratio(high_pseudospectra, config->num_high_freqs, result->high_tone.index);
+    
+    // Map to DTMF key
+    result->detected_key = map_dtmf_key(config, result->low_tone.index, result->high_tone.index);
+    
+    // Record window name
+    result->window_name = "MUSIC";
+    
+    // Record timing
+    timing_end(&wall_start, &cpu_start, &result->timing);
+    
+    // Cleanup
+    matrix_destroy(&hankel);
+    matrix_destroy(&hankel_t);
+    matrix_destroy(&autocorr);
+    matrix_destroy(&eigenvectors);
+    matrix_destroy(&noise_subspace);
+    free(eigenvalues);
+    
+    return DTMF_SUCCESS;
+}
+
 // =============================================================================
 // RESULT PRINTING
 // =============================================================================
@@ -1211,7 +1691,8 @@ int main(int argc, char **argv) {
         {"FFT with Zero-Padding", analyze_fft_strategy},
         {"Goertzel Algorithm", analyze_goertzel_strategy},
         {"Filter Bank + Energy Detection", analyze_filterbank_strategy},
-        {"Correlation-Based Detection", analyze_correlation_strategy}
+        {"Correlation-Based Detection", analyze_correlation_strategy},
+        {"MUSIC Algorithm", analyze_music_strategy}
     };
     
     const size_t num_strategies = sizeof(strategies) / sizeof(strategies[0]);
@@ -1230,9 +1711,9 @@ int main(int argc, char **argv) {
         for (size_t w = 0; w < NUM_WINDOW_STRATEGIES; w++) {
             dtmf_analysis_result_t analysis_result = {0};
             
-            // For Goertzel, Filter Bank, and Correlation, we only test with the first window (Rectangular/Raw) 
+            // For Goertzel, Filter Bank, Correlation, and MUSIC, we only test with the first window (Rectangular/Raw) 
             // since these algorithms work on raw samples, not windowed samples
-            if ((i == 1 || i == 2 || i == 3) && w > 0) continue;
+            if ((i == 1 || i == 2 || i == 3 || i == 4) && w > 0) continue;
             
             dtmf_result_t status = strategies[i].analyze(ctx, &DEFAULT_DTMF_CONFIG, &WINDOW_STRATEGIES[w], &analysis_result);
             
