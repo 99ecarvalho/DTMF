@@ -13,8 +13,8 @@ if [[ ! -f "./dtmf_compare" ]]; then
     exit 1
 fi
 
-if [[ ! -f "./dtmf_compare_refactored" ]]; then
-    echo "❌ Refactored dtmf_compare_refactored not found. Run: make dtmf_compare_refactored"
+if [[ ! -f "./dtmf" ]]; then
+    echo "❌ Refactored dtmf not found. Run: make dtmf"
     exit 1
 fi
 
@@ -37,7 +37,7 @@ for file in "${test_files[@]}"; do
         original_fft=$(./dtmf_compare "data/$file" 2>/dev/null | grep "detected key (FFT)" | cut -d'=' -f2 | tr -d ' ')
         original_goertzel=$(./dtmf_compare "data/$file" 2>/dev/null | grep "detected key (Goertzel)" | cut -d'=' -f2 | tr -d ' ')
         
-        refactored_results=$(./dtmf_compare_refactored "data/$file" 2>/dev/null | grep "Detected Key:" | cut -d':' -f2 | tr -d ' ')
+        refactored_results=$(./dtmf "data/$file" 2>/dev/null | grep "Detected Key:" | cut -d':' -f2 | tr -d ' ')
         refactored_fft=$(echo "$refactored_results" | sed -n '1p')
         refactored_goertzel=$(echo "$refactored_results" | sed -n '2p')
         
@@ -76,7 +76,7 @@ echo "Original version timing:"
 
 echo
 echo "Refactored version timing:"
-./dtmf_compare_refactored data/0.pcm | grep -E "Timing:"
+./dtmf data/0.pcm | grep -E "Timing:"
 
 echo
 echo "✅ Test completed!"

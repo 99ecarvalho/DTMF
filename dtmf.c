@@ -1,5 +1,5 @@
 /*
- * dtmf_compare_refactored.c
+ * dtmf.c
  *
  * Refactored DTMF tone detection system with modular design.
  *
@@ -15,7 +15,7 @@
  * - Performance optimizations while maintaining clarity
  *
  * Build:
- *   gcc -O2 -Wall -std=c99 -o dtmf_compare_refactored dtmf_compare_refactored.c -lm
+ *   gcc -O2 -Wall -std=c99 -o dtmf dtmf.c -lm
  */
 
 #define _POSIX_C_SOURCE 200809L

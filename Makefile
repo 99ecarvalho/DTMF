@@ -3,14 +3,13 @@ CFLAGS = -O2 -Wall -std=c99
 BUILD_DIR = build
 
 # Source files
-REFACTORED_SRC = dtmf_compare_refactored.c
+DTMF_SRC = dtmf.c
 
 # Target executables
-REFACTORED_TARGET = $(BUILD_DIR)/dtmf_compare_refactored
-ENHANCED_TARGET = $(BUILD_DIR)/dtmf_compare_enhanced
+DTMF_TARGET = $(BUILD_DIR)/dtmf
 
 # All targets
-ALL_TARGETS = $(REFACTORED_TARGET) $(ENHANCED_TARGET)
+ALL_TARGETS = $(DTMF_TARGET)
 
 # Default target
 all: $(BUILD_DIR) $(ALL_TARGETS)
@@ -21,24 +20,19 @@ $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
 # Refactored version
-$(REFACTORED_TARGET): $(REFACTORED_SRC) | $(BUILD_DIR)
-	@echo "Building refactored DTMF analyzer..."
-	$(CC) $(CFLAGS) -o $@ $< -lm
-
-# Enhanced version (same source as refactored, different name for clarity)
-$(ENHANCED_TARGET): $(REFACTORED_SRC) | $(BUILD_DIR)
-	@echo "Building enhanced DTMF analyzer with windowing..."
+$(DTMF_TARGET): $(DTMF_SRC) | $(BUILD_DIR)
+	@echo "Building DTMF analyzer..."
 	$(CC) $(CFLAGS) -o $@ $< -lm
 
 # Individual targets
-refactored: $(BUILD_DIR) $(REFACTORED_TARGET)
+refactored: $(BUILD_DIR) $(DTMF_TARGET)
 
 enhanced: $(BUILD_DIR) $(ENHANCED_TARGET)
 
 # Test targets
-test-refactored: $(REFACTORED_TARGET)
+test-refactored: $(DTMF_TARGET)
 	@echo "Testing refactored version with sample data/5.pcm:"
-	./$(REFACTORED_TARGET) data/5.pcm
+	./$(DTMF_TARGET) data/5.pcm
 
 test-enhanced: $(ENHANCED_TARGET)
 	@echo "Testing enhanced version with sample data/5.pcm:"
