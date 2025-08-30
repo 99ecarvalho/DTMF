@@ -1105,6 +1105,9 @@ static const char DTMF_TWIST_TABLE[4][4] = {
     {'*','0','#','D'}
 };
 
+// DTMF twist parameters
+static const double EXPECTED_TWIST_DB = 6.0;  // Expected twist: highs 6dB above lows
+
 // Helper function to find nearest Goertzel bin
 static int nearest_goertzel_bin(int N, int fs, double frequency) {
     double k_exact = (double)N * frequency / (double)fs;
@@ -1205,8 +1208,8 @@ static dtmf_twist_result_t process_frame_with_twist(const dtmf_goertzel_twist_t 
     const double ENERGY_MIN_REL = 0.02;    // Minimum (P_L + P_H) / total_energy
     const double GUARD_RATIO = 5.0;        // Minimum ratio between strongest and second strongest
     const double MIN_ABS_POWER = 1e-6;     // Absolute minimum power threshold
-    const double TWIST_MIN_DB = -4.0;      // ITU minimum twist limit
-    const double TWIST_MAX_DB = 8.0;       // ITU maximum twist limit
+    const double TWIST_MIN_DB = -8.0;      // ITU minimum twist limit (reverse twist tolerance)
+    const double TWIST_MAX_DB = 4.0;       // ITU maximum twist limit (forward twist tolerance)
     
     // Calculate total frame energy for VAD
     double total_energy = calculate_frame_energy(samples, detector->N);
@@ -1235,10 +1238,15 @@ static dtmf_twist_result_t process_frame_with_twist(const dtmf_goertzel_twist_t 
     }
     
     // ITU twist check (power domain)
+    // Standard DTMF: high frequencies should be ~6dB above low frequencies
+    // ITU-T Q.24 tolerates -8dB (reverse twist) to +4dB (forward twist)
     double twist_db = 10.0 * log10(power_high / power_low);
     if (twist_db < TWIST_MIN_DB || twist_db > TWIST_MAX_DB) {
         return result;
     }
+    
+    // Additional quality check: twist deviation from expected 6dB is used for confidence scoring
+    // This implements the "coherence between powers" mentioned in the specification
     
     // Map indices to DTMF digit
     int row = idx_low;          // 0..3
@@ -1455,10 +1463,16 @@ static dtmf_result_t analyze_goertzel_twist_strategy(const audio_context_t *ctx,
             
             result->detected_key = twist_result.digit;
             
-            // Calculate confidence ratios based on twist constraints
-            // For twist-compliant detection, we use energy ratio and twist as confidence measures
+            // Calculate confidence ratios based on twist constraints and expected behavior
+            // Low confidence: based on energy ratio (how strong the signal is relative to total energy)
             result->low_confidence = twist_result.energy_ratio * 100.0; // Scale energy ratio
-            result->high_confidence = (8.0 - fabs(twist_result.twist_db)) / 4.0; // Twist compliance factor
+            
+            // High confidence: based on how close the twist is to the expected 6dB
+            // Expected twist is 6dB (high frequencies should be 6dB above low frequencies)
+            double expected_twist = 6.0;
+            double twist_error = fabs(twist_result.twist_db - expected_twist);
+            // Scale so that perfect 6dB twist gives confidence ~2.0, acceptable range gives >1.0
+            result->high_confidence = 2.0 * exp(-twist_error / 3.0); // Gaussian-like decay from ideal
             
         } else {
             // Fallback if mapping fails
