@@ -5,6 +5,9 @@
  * This header contains all fundamental data structures, enumerations, and constants
  * used throughout the DTMF (Dual-Tone Multi-Frequency) detection system. It defines
  * the common interface between all modules and provides standardized error handling.
+ *
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #ifndef DTMF_TYPES_H

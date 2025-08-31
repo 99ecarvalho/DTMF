@@ -47,8 +47,7 @@
  * | Selectivity | Excellent | Good | Excellent |
  * | Complexity | Medium | High | Low |
  * 
- * @author DTMF Detection System
- * @version 2.0 Enhanced
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
  * @date August 2025
  */
 

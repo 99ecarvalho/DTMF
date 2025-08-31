@@ -20,6 +20,9 @@
  * Blackman window - Three-term cosine series with excellent 74 dB suppression
  * Kaiser window - Adjustable β parameter with Bessel function implementation
  * Rectangular window - Baseline comparison with maximum resolution but spectral leakage
+ *
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #include "dtmf_windowing.h"

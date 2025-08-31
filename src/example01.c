@@ -13,8 +13,8 @@
  * - Handling results and error conditions
  * - Memory management and cleanup
  * 
- * @author DTMF Detection System
- * @version 1.0
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #define _POSIX_C_SOURCE 200809L

@@ -5,6 +5,9 @@
  * This header provides various windowing functions used to reduce spectral leakage
  * in FFT-based DTMF analysis. Different windows offer trade-offs between main lobe
  * width and side lobe suppression, affecting frequency resolution and dynamic range.
+ *
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #ifndef DTMF_WINDOWING_H

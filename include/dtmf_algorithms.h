@@ -6,6 +6,9 @@
  * Goertzel algorithm variants, filter bank approach, correlation-based detection,
  * and the MUSIC algorithm. Each algorithm provides a different trade-off between
  * computational complexity, accuracy, and robustness.
+ *
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #ifndef DTMF_ALGORITHMS_H

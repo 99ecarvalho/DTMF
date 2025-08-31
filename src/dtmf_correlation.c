@@ -20,6 +20,9 @@
  * 
  * This provides a template matching approach that is robust to phase shifts
  * and can effectively distinguish between DTMF tones and noise.
+ * 
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #include "dtmf_algorithms.h"

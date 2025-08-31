@@ -15,6 +15,9 @@
  * The FFT algorithm computes the DFT efficiently in O(N log N) time using
  * the Cooley-Tukey radix-2 decimation-in-time algorithm with bit-reversal
  * permutation and butterfly operations.
+ *
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #include "dtmf_algorithms.h"

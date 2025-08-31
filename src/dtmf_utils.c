@@ -17,6 +17,8 @@
  * Configuration management - get_default_config(), load_config() for parameter setup
  * Audio context management - audio_context_init(), audio_context_cleanup() for processing context
  * 
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #define _POSIX_C_SOURCE 200809L

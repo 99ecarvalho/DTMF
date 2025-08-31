@@ -5,6 +5,9 @@
  * This header provides common utility functions including error handling,
  * logging, memory management, audio quality assessment, and mathematical
  * operations used throughout the DTMF detection system.
+ *
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #ifndef DTMF_UTILS_H

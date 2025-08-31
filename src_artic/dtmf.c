@@ -16,6 +16,9 @@
  *
  * Build:
  *   gcc -O2 -Wall -std=c99 -o dtmf dtmf.c -lm
+ *
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #define _POSIX_C_SOURCE 200809L

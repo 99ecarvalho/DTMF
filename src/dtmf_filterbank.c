@@ -18,6 +18,9 @@
  * 
  * Filter design uses the bilinear transform to convert analog prototypes
  * to digital implementations with precise frequency response control.
+ *
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #include "dtmf_algorithms.h"

@@ -12,6 +12,9 @@
  * - Configuration file parsing (main and minimal configs)
  * - Parameter validation and display
  * - Error handling for missing or invalid files
+ *
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #include "../include/dtmf_types.h"

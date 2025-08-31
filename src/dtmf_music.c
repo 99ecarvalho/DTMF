@@ -23,6 +23,9 @@
  * Where E_n contains the noise eigenvectors and e(f) is the steering vector
  * for frequency f. Peaks in the pseudospectrum indicate signal frequencies
  * with resolution limited only by numerical precision rather than window length.
+ *
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #include "dtmf_algorithms.h"

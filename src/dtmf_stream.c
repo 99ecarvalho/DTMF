@@ -35,9 +35,9 @@
  * # With custom configuration:
  * ./dtmf_stream input.pcm config.conf
  * ```
- * 
- * @author DTMF Detection System
- * @version 2.0 Enhanced
+ *
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #define _POSIX_C_SOURCE 200809L

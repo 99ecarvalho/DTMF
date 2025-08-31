@@ -18,6 +18,9 @@
  * 
  * After processing all samples, the magnitude is computed as:
  * |X[k]|² = y[N-1]² + y[N-2]² - 2*cos(2π*k/N)*y[N-1]*y[N-2]
+ *
+ * @author Eduardo Correia <ecorreia@apliant.com.br>
+ * @date August 2025
  */
 
 #include "dtmf_algorithms.h"
