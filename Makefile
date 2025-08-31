@@ -48,7 +48,22 @@ endif
 $(shell mkdir -p $(BUILDDIR) $(DEPDIR))
 
 # Default target
-all: dtmf_stream dtmf_stream_legacy test_config_loading
+all: dtmf_stream dtmf_stream_legacy test_config_loading example01
+# Example usage program
+EXAMPLE_SRC = $(SRCDIR)/example01.c
+EXAMPLE_OBJ = $(BUILDDIR)/example01.o
+
+# Build example01
+example01: $(BUILDDIR)/example01
+
+$(BUILDDIR)/example01: $(EXAMPLE_OBJ) $(LIB_OBJECTS)
+	@echo "Linking example01..."
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Compile example01 object
+$(BUILDDIR)/example01.o: $(SRCDIR)/example01.c
+	@echo "Compiling example01.c..."
+	$(CC) $(CFLAGS) $(INCLUDES) -MMD -MP -MF $(DEPDIR)/example01.d -c $< -o $@
 
 # Enhanced dtmf_stream with modular architecture
 dtmf_stream: $(BUILDDIR)/dtmf_stream
