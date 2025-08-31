@@ -10,7 +10,7 @@ echo
 # Build if needed
 if [ ! -f "build/dtmf_stream" ]; then
     echo "📦 Building streaming analyzer..."
-    make stream
+    make dtmf_stream
     echo
 fi
 
@@ -19,7 +19,7 @@ echo
 
 # Test different digits
 for digit in 1 2 5 star; do
-    echo "🎯 Processing data/${digit}.pcm:"
+    echo "🎯 Processing data/01/${digit}.pcm:"
     echo "   Expected: $(case $digit in 
         1) echo "1" ;; 
         2) echo "2" ;; 
@@ -28,7 +28,7 @@ for digit in 1 2 5 star; do
     esac)"
     
     # Get first few frames and extract the detected digits
-    result=$(./build/dtmf_stream data/${digit}.pcm | grep -v "^#" | grep -v "^Timestamp" | head -5 | awk '{print $3}' | sort | uniq -c | sort -nr | head -1)
+    result=$(./build/dtmf_stream data/01/${digit}.pcm | grep -v "^#" | grep -v "^Timestamp" | grep -v "^-" | head -5 | awk -F'|' '{print $4}' | awk '{print $1}' | sort | uniq -c | sort -nr | head -1)
     
     if [ -n "$result" ]; then
         detected=$(echo $result | awk '{print $2}')
@@ -42,18 +42,14 @@ echo "📊 Streaming vs File Processing Comparison"
 echo "==========================================="
 echo
 
-echo "🎯 Testing with 5.pcm using original analyzer:"
-./build/dtmf data/5.pcm | grep "Detected" | head -1
-
-echo
 echo "🎯 Testing with 5.pcm using streaming analyzer (first frame, FFT only):"
-./build/dtmf_stream data/5.pcm | grep -E "^\s*0\.000.*FFT"
+./build/dtmf_stream data/01/5.pcm | grep -E "^\s*0\.000.*FFT" | head -1
 
 echo
 echo "🌊 Streaming from stdin demonstration:"
-echo "   (Processing first 3 frames of data/5.pcm through pipe)"
+echo "   (Processing first 3 frames of data/01/5.pcm through pipe)"
 echo
-head -c 1920 data/5.pcm | ./build/dtmf_stream | grep -v "^#" | grep -v "^Timestamp" | grep -v "^-"
+head -c 1920 data/01/5.pcm | ./build/dtmf_stream | grep -v "^#" | grep -v "^Timestamp" | grep -v "^-"
 
 echo
 echo "✅ Streaming analyzer features:"
