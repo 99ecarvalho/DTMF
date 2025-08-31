@@ -13,6 +13,7 @@ This is a comprehensive DTMF (Dual-Tone Multi-Frequency) detection system implem
 - [Usage](#usage)
 - [Configuration](#configuration)
 - [API Documentation](#api-documentation)
+- [Documentation Generation](#documentation-generation)
 - [Performance](#performance)
 - [Testing](#testing)
 
@@ -422,6 +423,140 @@ dtmf_result_t validate_audio_quality(const int16_t *samples, size_t count, audio
 void remove_dc_offset(int16_t *samples, size_t count);  
 void apply_agc(int16_t *samples, size_t count, double target_rms);
 ```
+
+## Documentation Generation
+
+This project includes comprehensive documentation generation using Doxygen with modern styling. The `docs_create.sh` script provides a Docker-based solution for generating multiple documentation formats.
+
+### Quick Start
+
+Generate HTML documentation with the Doxygen Awesome theme:
+```bash
+./docs_create.sh
+```
+
+Clean build (removes existing documentation):
+```bash
+./docs_create.sh --clean
+```
+
+### Multiple Output Formats
+
+The documentation system supports multiple output formats:
+
+#### Available Formats
+- **HTML** - Interactive web documentation with modern theme
+- **PDF** - Professional print-quality documentation (via LaTeX)
+- **RTF** - Rich Text Format for Microsoft Word compatibility  
+- **DocBook** - XML format for further processing
+
+#### Standard Generation
+```bash
+# Generate all standard formats (HTML + PDF + RTF + DocBook)
+./docs_create.sh --clean
+```
+
+#### DocBook Conversions
+Convert DocBook XML to additional formats:
+
+```bash
+# Generate e-book format
+./docs_create.sh --docbook-to epub
+
+# Generate multiple formats from DocBook
+./docs_create.sh --docbook-to epub,txt,html,pdf
+
+# Clean build with all DocBook conversions
+./docs_create.sh --clean --docbook-to epub,txt,html,pdf
+```
+
+**DocBook conversion formats:**
+- `epub` - E-book format (Kindle, tablets, e-readers)
+- `pdf` - Alternative PDF generation via DocBook stylesheets
+- `html` - Single-page HTML (different from Doxygen's multi-page HTML)
+- `txt` - Plain text documentation for terminal/CLI usage
+
+### Output Structure
+
+Generated documentation is organized in the `docs/` directory:
+
+```
+docs/
+├── html/                      # Interactive HTML documentation  
+│   ├── index.html            # Main documentation page
+│   ├── annotated.html        # API reference
+│   └── ...
+├── latex/                     # LaTeX source and compiled PDF
+│   ├── refman.pdf           # Main PDF documentation
+│   └── ...
+├── rtf/                      # Rich Text Format files
+├── docbook/                  # DocBook XML files
+├── documentation.epub        # E-book format (if --docbook-to epub)
+├── documentation.txt         # Plain text (if --docbook-to txt)
+└── documentation.pdf         # DocBook PDF (if --docbook-to pdf)
+```
+
+### Docker Configuration
+
+The system uses Docker for consistent documentation generation across different environments:
+
+- **`docker/Dockerfile.doxygen`** - Optimized for C projects with all necessary tools
+- **`docker/Doxyfile`** - Doxygen configuration optimized for C codebases
+- **`docker/header.html`** & **`docker/footer.html`** - Custom HTML templates
+
+#### C-Specific Optimizations
+
+The Docker configuration is optimized for C projects:
+- Prioritizes C file extensions (`.c`, `.h`) over C++
+- Includes appropriate packages for PDF generation
+- Configured for C-style documentation patterns
+
+### Usage Examples
+
+#### For Developers
+```bash
+# Quick HTML preview during development
+./docs_create.sh
+
+# Full documentation for release
+./docs_create.sh --clean --docbook-to epub,txt
+```
+
+#### For Distribution
+```bash
+# Generate all formats for comprehensive documentation package
+./docs_create.sh --clean --docbook-to epub,pdf,html,txt
+```
+
+#### Continuous Integration
+```bash
+# Automated documentation generation in CI/CD
+docker build -t doc-builder -f docker/Dockerfile.doxygen docker/
+docker run --rm -v "$PWD:/docs/project:ro" -v "$PWD/docs:/docs/output" doc-builder
+```
+
+### Script Options
+
+```
+Usage: ./docs_create.sh [--clean] [--docbook-to FORMAT]
+
+Options:
+  --clean              Remove existing docs directory before generating
+  --docbook-to FORMAT  Convert DocBook to additional formats:
+                       epub,pdf,html,txt (comma-separated)
+  -h, --help           Show this help message
+```
+
+### Requirements
+
+- **Docker** - For containerized documentation generation
+- **Internet connection** - First run downloads Doxygen Awesome theme
+
+The script automatically:
+- Builds the Docker image with all required tools
+- Downloads and configures the Doxygen Awesome theme
+- Generates documentation in specified formats
+- Provides links to generated documentation files
 
 ## Performance
 

@@ -4,16 +4,21 @@ FROM ubuntu:22.04
 # Set non-interactive frontend to avoid prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Update package list and install required packages, then download and setup Doxygen Awesome theme
+# Update package list and install required packages optimized for C projects
 RUN apt-get update && apt-get install -y \
     curl \
     doxygen \
+    ghostscript \
     git \
     graphviz \
+    make \
+    texlive-fonts-extra \
     texlive-fonts-recommended \
     texlive-latex-base \
     texlive-latex-extra \
     texlive-latex-recommended \
+    texlive-luatex \
+    texlive-xetex \    
     unzip \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /docs \

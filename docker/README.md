@@ -1,14 +1,14 @@
 # Docker Documentation Setup
 
-### Copyright (c) 2025 TK Elevator Innovation and Operations GmbH
-### Author: Eduardo Correia <eduardo.correia.external@tkelevator.com>
+### Copyright (c) 2025
+### Author: Eduardo Correia <ecorreia@apliant.com.br>
 
 This directory contains Docker configuration for generating project documentation using Doxygen with the modern Doxygen Awesome theme.
 
 ## Files
 
 - `Dockerfile.doxygen`: Docker image definition for Doxygen documentation generation with Doxygen Awesome theme
-- `Doxyfile`: Doxygen configuration file optimized for the TKE Fusion project with modern styling
+- `Doxyfile`: Doxygen configuration file optimized for the project with modern styling
 - `header.html`: Custom HTML header with dark mode toggle support
 - `footer.html`: Custom HTML footer with modern styling
 - `../run_doxygen.sh`: Bash script to build and run the documentation generation
@@ -52,7 +52,7 @@ If you prefer to run Docker commands manually:
 
 ```bash
 # Build the image
-docker build -t tke-fusion-doxygen -f docker/Dockerfile.doxygen docker/
+docker build -t doc-doxygen -f docker/Dockerfile.doxygen docker/
 
 # Create output directory
 mkdir -p docs
@@ -65,7 +65,7 @@ docker run --rm \
   -v "$(pwd):/docs/project:ro" \
   -v "$(pwd)/docs:/docs/output" \
   -w /docs/output \
-  tke-fusion-doxygen \
+  doc-doxygen \
   doxygen Doxyfile
 ```
 

@@ -1,21 +1,21 @@
-# Doxyfile configuration for TKE Fusion project
+# Doxyfile configuration for DTMF
 
 # Project related configuration options
-PROJECT_NAME           = "TKE Fusion Algorithm"
+PROJECT_NAME           = "DTMF Detection Library"
 PROJECT_NUMBER         = "1.0"
-PROJECT_BRIEF          = "Modern sensor fusion algorithm for elevator systems with advanced signal processing"
+PROJECT_BRIEF          = "Library and Application for Dual-Tone Multi-Frequency (DTMF) signal detection and analysis\\n\\nAuthor: Eduardo Correia <ecorreia@apliant.com.br>"
 PROJECT_LOGO           = 
 
-# Build related configuration options
+# Build related configuration options (optimized for C)
 EXTRACT_ALL            = YES
 EXTRACT_PRIVATE        = NO
 EXTRACT_STATIC         = YES
-EXTRACT_LOCAL_CLASSES  = YES
+EXTRACT_LOCAL_CLASSES  = NO
 EXTRACT_LOCAL_METHODS  = NO
 EXTRACT_ANON_NSPACES   = NO
 HIDE_UNDOC_MEMBERS     = NO
-HIDE_UNDOC_CLASSES     = NO
-HIDE_FRIEND_COMPOUNDS  = NO
+HIDE_UNDOC_CLASSES     = YES
+HIDE_FRIEND_COMPOUNDS  = YES
 HIDE_IN_BODY_DOCS      = NO
 
 # Configuration options related to warning and progress messages
@@ -27,14 +27,14 @@ WARN_NO_PARAMDOC       = NO
 
 # Configuration options related to the input files
 INPUT                  = /docs/project
-FILE_PATTERNS          = *.cpp \
+FILE_PATTERNS          = *.c \
                          *.h \
+                         *.md \
+                         *.cpp \
                          *.hpp \
-                         *.c \
                          *.cc \
                          *.cxx \
-                         *.c++ \
-                         *.md
+                         *.c++
 
 RECURSIVE              = YES
 EXCLUDE                = /docs/project/build \
@@ -99,11 +99,12 @@ SERVER_BASED_SEARCH    = NO
 # Configuration options related to the LaTeX output
 GENERATE_LATEX         = NO
 LATEX_OUTPUT           = latex
-LATEX_CMD_NAME         = latex
+LATEX_CMD_NAME         = pdflatex
 MAKEINDEX_CMD_NAME     = makeindex
 COMPACT_LATEX          = NO
 PAPER_TYPE             = a4
-EXTRA_PACKAGES         = 
+EXTRA_PACKAGES         = textcomp \
+                         newunicodechar
 LATEX_HEADER           = 
 LATEX_FOOTER           = 
 LATEX_EXTRA_STYLESHEET = 
@@ -117,6 +118,12 @@ LATEX_BIB_STYLE        = plain
 
 # Configuration options related to the RTF output
 GENERATE_RTF           = NO
+RTF_OUTPUT             = rtf
+COMPACT_RTF            = NO
+RTF_HYPERLINKS         = YES
+RTF_STYLESHEET_FILE    = 
+RTF_EXTENSIONS_FILE    = 
+RTF_SOURCE_CODE        = NO
 
 # Configuration options related to the man page output
 GENERATE_MAN           = NO
@@ -126,6 +133,7 @@ GENERATE_XML           = NO
 
 # Configuration options related to the DOCBOOK output
 GENERATE_DOCBOOK       = NO
+DOCBOOK_OUTPUT         = docbook
 
 # Configuration options related to the AutoGen Definitions output
 GENERATE_AUTOGEN_DEF   = NO
