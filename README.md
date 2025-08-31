@@ -54,14 +54,28 @@ This is a comprehensive DTMF (Dual-Tone Multi-Frequency) detection system implem
 │   ├── dtmf_windowing.c       # Windowing function implementations
 │   ├── dtmf_fft.c             # FFT algorithm implementation
 │   ├── dtmf_goertzel.c        # Goertzel algorithm variants
-│   ├── dtmf_filterbank.c      # Filter bank approach
+│   ├── dtmf_filterbank.c      # Filter bank approach (FIR-based)
+│   ├── dtmf_filterbank_iir.c  # IIR filter bank implementation
 │   ├── dtmf_correlation.c     # Correlation-based detection
-│   └── dtmf_music.c           # MUSIC algorithm implementation
-├── src_artic/                 # Legacy monolithic implementation
-│   └── dtmf_stream_legacy.c   # Original single-file version
+│   ├── dtmf_music.c           # MUSIC algorithm implementation
+│   ├── example01.c            # Example usage program
+│   └── test_config_loading.c  # Configuration testing utility
 ├── data/                      # Test audio samples
-├── docs/                      # Documentation
-└── build/                     # Compiled binaries
+│   ├── 01/                    # Clean single-digit samples
+│   ├── audiocheck.net/        # Professional test tones
+│   └── rec/                   # Real-world recordings
+├── docs/                      # Generated documentation
+├── build/                     # Compiled binaries
+├── docker/                    # Docker configuration for docs
+├── docs_reference/            # Reference PDFs and specifications
+├── youtube_stream.py          # YouTube audio streaming utility
+├── youtube_demo.sh            # YouTube demo script
+├── youtube_debug.py           # YouTube streaming debug tool
+├── youtube_test_alternatives.py # Alternative YouTube processing methods
+├── demo_algorithm_accuracy.sh # Algorithm accuracy testing
+├── demo_streaming.sh          # Streaming demonstration
+├── demo_windowing.sh          # Windowing function comparison
+└── docs_create.sh             # Documentation generation script
 ```
 
 ### Core Data Types
@@ -98,7 +112,7 @@ typedef struct {
 
 ## Algorithms
 
-The system implements six different DTMF detection algorithms, each with distinct characteristics:
+The system implements seven different DTMF detection algorithms, each with distinct characteristics:
 
 ### 1. FFT-Based Analysis (`analyze_fft_strategy`)
 
@@ -152,7 +166,23 @@ Twist(dB) = 10 * log₁₀(P_high / P_low)
 
 ### 4. Filter Bank Approach (`analyze_filterbank_strategy`)
 
-**Description**: Uses multiple IIR bandpass filters to isolate each DTMF frequency component before energy measurement.
+**Description**: Uses multiple FIR bandpass filters to isolate each DTMF frequency component before energy measurement.
+
+**Filter Design**: 
+- FIR bandpass filters with configurable parameters
+- Center frequencies at each DTMF tone
+- Configurable bandwidth and filter order
+
+**Strengths**:
+- Good noise rejection
+- Linear phase response
+- Stable performance across different signal conditions
+
+**Computational Complexity**: O(MN) where M is filter order, N is frame length
+
+### 5. IIR Filter Bank Approach (`analyze_filterbank_iir_strategy`)
+
+**Description**: Uses multiple IIR (Infinite Impulse Response) bandpass filters to isolate each DTMF frequency component.
 
 **Filter Design**: 
 - Second-order IIR bandpass filters
@@ -161,12 +191,12 @@ Twist(dB) = 10 * log₁₀(P_high / P_low)
 
 **Strengths**:
 - Excellent noise rejection
-- Good selectivity
-- Stable performance across different signal conditions
+- Higher computational efficiency than FIR
+- Good selectivity with sharp frequency response
 
 **Computational Complexity**: O(8N) for 8 parallel filters
 
-### 5. Correlation-Based Detection (`analyze_correlation_strategy`)
+### 6. Correlation-Based Detection (`analyze_correlation_strategy`)
 
 **Description**: Cross-correlates input signal with reference sinusoids at DTMF frequencies.
 
@@ -183,7 +213,7 @@ Magnitude = |R(f)|
 
 **Computational Complexity**: O(8N) for correlation computation
 
-### 6. MUSIC Algorithm (`analyze_music_strategy`)
+### 7. MUSIC Algorithm (`analyze_music_strategy`)
 
 **Description**: Multiple Signal Classification algorithm using eigendecomposition for high-resolution spectral analysis.
 
@@ -237,9 +267,17 @@ make analyze
 
 ### Build Targets
 
-- `dtmf_stream`: Enhanced modular version
-- `dtmf_stream_legacy`: Original monolithic version  
-- `libdtmf.a`: Static library (optional)
+- **`dtmf_stream`**: Enhanced modular version with all algorithms
+- **`example01`**: Simple example program demonstrating API usage
+- **`test_config_loading`**: Configuration file testing utility
+- **`libdtmf.a`**: Static library (optional)
+
+### Additional Utilities
+
+The build system also includes several utility programs:
+
+- **`example01`**: Demonstrates basic DTMF detection API usage
+- **`test_config_loading`**: Tests configuration file parsing and validation
 
 ### Clean Operations
 
@@ -263,6 +301,43 @@ Examples:
   ./dtmf_stream data.pcm                    # Process file with defaults
   cat data.pcm | ./dtmf_stream -            # Process from stdin  
   ./dtmf_stream data.pcm dtmf_config.conf   # Process with custom config
+```
+
+### YouTube Audio Streaming
+
+The system includes utilities for analyzing DTMF tones from YouTube videos or local video files:
+
+```bash
+# Stream YouTube video audio for DTMF analysis
+python3 youtube_stream.py "https://youtube.com/watch?v=VIDEO_ID" | ./dtmf_stream -
+
+# Process local video file
+python3 youtube_stream.py --local-file video.mp4 | ./dtmf_stream -
+
+# Use fallback method when streaming fails
+./youtube_demo.sh  # Shows manual download approach
+```
+
+**Requirements**: `yt-dlp` package (`pip install yt-dlp`)
+
+**Note**: YouTube's bot detection may prevent direct streaming. The `youtube_demo.sh` script provides manual alternatives using `yt-dlp` and `ffmpeg`.
+
+### Demo Scripts
+
+Several demonstration scripts are provided:
+
+```bash
+# Test algorithm accuracy across all samples
+./demo_algorithm_accuracy.sh
+
+# Show real-time streaming capabilities  
+./demo_streaming.sh
+
+# Compare different windowing functions
+./demo_windowing.sh
+
+# YouTube integration examples
+./youtube_demo.sh
 ```
 
 ### Input Format
@@ -295,6 +370,7 @@ enable_fft=true
 enable_goertzel=true
 enable_goertzel_twist=false
 enable_filterbank=false
+enable_filterbank_iir=false
 enable_correlation=false
 enable_music=false
 
@@ -328,7 +404,8 @@ log_to_stderr=true
 enable_fft=false
 enable_goertzel=true
 enable_goertzel_twist=false
-enable_filterbank=false  
+enable_filterbank=false
+enable_filterbank_iir=false
 enable_correlation=false
 enable_music=false
 memory_pool_size=2097152
@@ -341,6 +418,7 @@ enable_fft=true
 enable_goertzel=true
 enable_goertzel_twist=true
 enable_filterbank=true
+enable_filterbank_iir=true
 enable_correlation=true
 enable_music=false  # Enable for extreme accuracy needs
 enable_audio_validation=true
@@ -354,6 +432,7 @@ enable_fft=false
 enable_goertzel=true
 enable_goertzel_twist=false
 enable_filterbank=false
+enable_filterbank_iir=false
 enable_correlation=false
 enable_music=false
 memory_pool_size=262144
@@ -567,7 +646,8 @@ The script automatically:
 | **FFT** | High | Medium | Medium | O(N log N) | General purpose, good SNR |
 | **Goertzel** | High | Fast | Low | O(N) | Real-time, embedded systems |
 | **Goertzel+Twist** | High | Fast | Low | O(N) | Telephony compliance |
-| **Filter Bank** | High | Medium | Medium | O(N) | Noisy environments |  
+| **Filter Bank (FIR)** | High | Medium | Medium | O(MN) | Linear phase requirements |
+| **Filter Bank (IIR)** | High | Fast | Low | O(N) | Sharp frequency selectivity |
 | **Correlation** | Very High | Slow | Low | O(N) | Challenging conditions |
 | **MUSIC** | Excellent | Very Slow | High | O(L³) | Research, extreme accuracy |
 
@@ -597,7 +677,8 @@ Measured on Intel i7-8750H @ 2.2GHz, processing 40ms frames (320 samples):
 | Goertzel | 45 | 68 | 0.11% |
 | FFT+Hamming | 125 | 180 | 0.31% |  
 | Goertzel+Twist | 52 | 78 | 0.13% |
-| Filter Bank | 89 | 135 | 0.22% |
+| Filter Bank (FIR) | 89 | 135 | 0.22% |
+| Filter Bank (IIR) | 67 | 98 | 0.17% |
 | Correlation | 156 | 225 | 0.39% |
 | MUSIC | 890 | 1250 | 2.23% |
 
@@ -613,17 +694,20 @@ The `data/` directory contains test audio samples:
 - **data/audiocheck.net/**: Professional test tones with known characteristics
 - **data/rec/**: Real-world recordings with background noise
 
+### Test Configuration Files
+
+Specialized configuration files for algorithm testing:
+
+- **`dtmf_config.conf`**: Full-featured configuration with all algorithms
+- **`dtmf_config_minimal.conf`**: Minimal configuration for basic testing
+- **`test_filterbank_only.conf`**: FIR filter bank algorithm only
+- **`test_iir_only.conf`**: IIR filter bank algorithm only
+
 ### Running Tests
 
 ```bash
 # Test enhanced version with sample data
 make test-enhanced
-
-# Test legacy version
-make test-legacy  
-
-# Compare both versions
-make compare
 
 # Run with specific test file
 ./build/dtmf_stream data/01/5.pcm
@@ -633,14 +717,19 @@ cat data/01/5.pcm | ./build/dtmf_stream -
 
 # Test with configuration
 ./build/dtmf_stream data/01/5.pcm dtmf_config.conf
+
+# Test specific algorithms
+./build/dtmf_stream data/01/5.pcm test_iir_only.conf
 ```
 
 ### Validation Scripts
 
-- `test_algorithm_accuracy.sh`: Tests detection accuracy across all samples
-- `test_comparison.sh`: Compares results between algorithms  
-- `demo_windowing.sh`: Demonstrates different windowing functions
-- `demo_streaming.sh`: Shows real-time streaming capabilities
+- **`demo_algorithm_accuracy.sh`**: Tests detection accuracy across all samples
+- **`demo_streaming.sh`**: Shows real-time streaming capabilities
+- **`demo_windowing.sh`**: Demonstrates different windowing functions
+- **`youtube_demo.sh`**: YouTube integration examples
+- **`youtube_debug.py`**: Debug tool for YouTube streaming issues
+- **`youtube_test_alternatives.py`**: Alternative YouTube processing methods
 
 ### Quality Metrics
 
