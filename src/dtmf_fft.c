@@ -1,7 +1,20 @@
-/*
- * dtmf_fft.c
- *
- * FFT implementation and FFT-based analysis
+/**
+ * @file dtmf_fft.c
+ * @brief Implementation of Fast Fourier Transform for DTMF frequency analysis
+ * 
+ * This file contains the implementation of FFT-based DTMF detection algorithms.
+ * The FFT provides high-resolution frequency domain analysis suitable for
+ * accurate detection of DTMF tones and measurement of their relative amplitudes.
+ * 
+ * Mathematical foundation:
+ * The Discrete Fourier Transform (DFT) converts time-domain samples x[n] to
+ * frequency-domain coefficients X[k]:
+ * 
+ * X[k] = Σ(n=0 to N-1) x[n] * e^(-j*2π*k*n/N)
+ * 
+ * The FFT algorithm computes the DFT efficiently in O(N log N) time using
+ * the Cooley-Tukey radix-2 decimation-in-time algorithm with bit-reversal
+ * permutation and butterfly operations.
  */
 
 #include "dtmf_algorithms.h"
@@ -11,6 +24,26 @@
 // FFT IMPLEMENTATION
 // =============================================================================
 
+/**
+ * @brief Compute radix-2 Fast Fourier Transform
+ * 
+ * Implements the Cooley-Tukey radix-2 FFT algorithm for efficient frequency
+ * domain transformation. Uses in-place computation with bit-reversal permutation
+ * followed by log₂(N) stages of butterfly operations.
+ * 
+ * Algorithm stages:
+ * 1. Bit-reversal permutation to reorder input samples
+ * 2. Iterative butterfly operations with twiddle factors
+ * 3. Complex multiplication and addition for frequency bins
+ * 
+ * Time complexity: O(N log N)
+ * Space complexity: O(1) additional (in-place)
+ * 
+ * @param buffer Complex buffer containing input samples, output frequency bins
+ * @param n Size of buffer (must be power of 2)
+ * @param inverse If true, compute inverse FFT; if false, compute forward FFT
+ * @return DTMF_SUCCESS on success, DTMF_ERROR_INVALID_PARAM if n not power of 2
+ */
 dtmf_result_t fft_radix2(complex_t *buffer, size_t n, bool inverse) {
     if (!buffer || !is_power_of_two((int)n)) {
         return DTMF_ERROR_INVALID_PARAM;
@@ -64,6 +97,28 @@ dtmf_result_t fft_radix2(complex_t *buffer, size_t n, bool inverse) {
 // FFT-BASED ANALYSIS
 // =============================================================================
 
+/**
+ * @brief Perform DTMF detection using FFT frequency domain analysis
+ * 
+ * Implements comprehensive DTMF detection using Fast Fourier Transform to
+ * analyze frequency content. The algorithm applies windowing, computes FFT,
+ * analyzes frequency bins for DTMF tones, and validates detection criteria
+ * including twist tolerance and confidence ratios.
+ * 
+ * Processing pipeline:
+ * 1. Apply selected windowing function to reduce spectral leakage
+ * 2. Zero-pad to power-of-two length for efficient FFT
+ * 3. Compute magnitude spectrum using radix-2 FFT
+ * 4. Identify peaks in low and high DTMF frequency bands
+ * 5. Validate twist tolerance and confidence metrics
+ * 6. Map frequency indices to DTMF character
+ * 
+ * @param ctx Audio context containing samples and configuration
+ * @param config DTMF frequency configuration and key mapping
+ * @param window_strategy Windowing function to apply before FFT
+ * @param result Output structure for detection results and timing
+ * @return DTMF_SUCCESS on successful analysis, error codes on failure
+ */
 dtmf_result_t analyze_fft_strategy(const audio_context_t *ctx,
                                   const dtmf_config_t *config,
                                   const window_strategy_t *window_strategy,

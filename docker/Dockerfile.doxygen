@@ -1,0 +1,33 @@
+# Dockerfile for running Doxygen documentation generation
+FROM ubuntu:22.04
+
+# Set non-interactive frontend to avoid prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update package list and install required packages, then download and setup Doxygen Awesome theme
+RUN apt-get update && apt-get install -y \
+    curl \
+    doxygen \
+    git \
+    graphviz \
+    texlive-fonts-recommended \
+    texlive-latex-base \
+    texlive-latex-extra \
+    texlive-latex-recommended \
+    unzip \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /docs \
+    && curl -L https://github.com/jothepro/doxygen-awesome-css/archive/refs/tags/v2.3.3.zip -o /tmp/doxygen-awesome.zip \
+    && cd /tmp \
+    && unzip doxygen-awesome.zip \
+    && mv doxygen-awesome-css-* /docs/doxygen-awesome \
+    && rm doxygen-awesome.zip
+
+# Create working directory
+WORKDIR /docs
+
+# Create a default Doxyfile if none exists
+RUN doxygen -g Doxyfile
+
+# Set default command
+CMD ["doxygen", "Doxyfile"]

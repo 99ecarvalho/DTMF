@@ -1,7 +1,23 @@
-/*
- * dtmf_filterbank.c
- *
- * Filter bank implementation for DTMF analysis
+/**
+ * @file dtmf_filterbank.c
+ * @brief Implementation of filter bank approach for DTMF detection
+ * 
+ * This file contains the implementation of a filter bank approach to DTMF
+ * detection using digital bandpass filters tuned to each DTMF frequency.
+ * The filter bank method provides excellent noise rejection and frequency
+ * selectivity through dedicated filters for each tone.
+ * 
+ * Mathematical foundation:
+ * Each bandpass filter implements a second-order IIR (Infinite Impulse Response)
+ * filter with transfer function:
+ * 
+ * H(z) = (b₀ + b₁z⁻¹ + b₂z⁻²) / (1 + a₁z⁻¹ + a₂z⁻²)
+ * 
+ * The difference equation is:
+ * y[n] = b₀x[n] + b₁x[n-1] + b₂x[n-2] - a₁y[n-1] - a₂y[n-2]
+ * 
+ * Filter design uses the bilinear transform to convert analog prototypes
+ * to digital implementations with precise frequency response control.
  */
 
 #include "dtmf_algorithms.h"
@@ -12,6 +28,17 @@
 // IIR FILTER IMPLEMENTATION
 // =============================================================================
 
+/**
+ * @brief Initialize IIR filter structure with specified order
+ * 
+ * Allocates memory for filter coefficients and delay lines for an IIR filter
+ * of the specified order. Creates arrays for feedforward coefficients (b),
+ * feedback coefficients (a), input delay line (x), and output delay line (y).
+ * 
+ * @param filter IIR filter structure to initialize
+ * @param order Filter order (number of poles/zeros)
+ * @return DTMF_SUCCESS on success, DTMF_ERROR_MEMORY on allocation failure
+ */
 dtmf_result_t iir_filter_init(iir_filter_t *filter, int order) {
     if (!filter || order <= 0) {
         return DTMF_ERROR_INVALID_PARAM;
@@ -34,6 +61,14 @@ dtmf_result_t iir_filter_init(iir_filter_t *filter, int order) {
     return DTMF_SUCCESS;
 }
 
+/**
+ * @brief Clean up IIR filter and free allocated memory
+ * 
+ * Releases all memory allocated for filter coefficients and delay lines.
+ * Resets the filter structure to zero state.
+ * 
+ * @param filter IIR filter structure to clean up
+ */
 void iir_filter_cleanup(iir_filter_t *filter) {
     if (filter) {
         free(filter->coeffs_b);
@@ -44,6 +79,22 @@ void iir_filter_cleanup(iir_filter_t *filter) {
     }
 }
 
+/**
+ * @brief Design second-order bandpass filter for DTMF frequency
+ * 
+ * Creates a second-order IIR bandpass filter centered at the specified
+ * frequency with the given bandwidth. Uses bilinear transform method
+ * to convert analog filter design to digital implementation.
+ * 
+ * The filter provides sharp frequency selectivity for isolating individual
+ * DTMF tones while rejecting adjacent frequencies and noise.
+ * 
+ * @param filter IIR filter structure to configure
+ * @param center_freq Center frequency of the bandpass filter in Hz
+ * @param bandwidth Filter bandwidth (3 dB) in Hz
+ * @param sample_rate Audio sampling rate in Hz
+ * @return DTMF_SUCCESS on success, DTMF_ERROR_INVALID_PARAM on invalid parameters
+ */
 dtmf_result_t design_bandpass_filter(iir_filter_t *filter, 
                                     double center_freq, 
                                     double bandwidth,

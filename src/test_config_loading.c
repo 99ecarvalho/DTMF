@@ -1,6 +1,17 @@
 /**
  * @file test_config_loading.c
  * @brief Test program to verify configuration loading functionality
+ * 
+ * This test program validates the configuration management system for the
+ * DTMF detection library. It tests loading default configurations, parsing
+ * configuration files, and displaying all configuration parameters in a
+ * human-readable format for verification and debugging purposes.
+ * 
+ * Test coverage includes:
+ * - Default configuration initialization
+ * - Configuration file parsing (main and minimal configs)
+ * - Parameter validation and display
+ * - Error handling for missing or invalid files
  */
 
 #include "../include/dtmf_types.h"
@@ -10,6 +21,19 @@
 // Forward declaration from dtmf_utils.c (load_config not in header yet)
 dtmf_result_t load_config(const char *config_file, dtmf_config_advanced_t *config);
 
+/**
+ * @brief Display comprehensive configuration parameters
+ * 
+ * Prints all configuration parameters in organized sections for easy
+ * verification and debugging. Includes detection thresholds, processing
+ * parameters, algorithm selection flags, performance tuning options,
+ * and logging configuration.
+ * 
+ * Output format provides clear categorization of related parameters
+ * with appropriate formatting for boolean values and numeric precision.
+ * 
+ * @param config Pointer to advanced DTMF configuration structure
+ */
 void print_config(const dtmf_config_advanced_t *config) {
     printf("=== DTMF Configuration ===\n");
     
@@ -49,6 +73,31 @@ void print_config(const dtmf_config_advanced_t *config) {
     printf("\n=============================\n");
 }
 
+/**
+ * @brief Main test function for configuration loading validation
+ * 
+ * Executes comprehensive tests of the DTMF configuration system including:
+ * 
+ * Test 1: Default Configuration Loading
+ * - Verifies default parameter initialization
+ * - Ensures all defaults are within valid ranges
+ * - Displays baseline configuration values
+ * 
+ * Test 2: Main Configuration File Loading
+ * - Tests parsing of dtmf_config.conf with full parameter set
+ * - Validates file format parsing and parameter assignment
+ * - Verifies error handling for malformed entries
+ * 
+ * Test 3: Minimal Configuration File Loading  
+ * - Tests parsing of dtmf_config_minimal.conf with subset of parameters
+ * - Validates that unspecified parameters retain default values
+ * - Ensures graceful handling of sparse configuration files
+ * 
+ * Each test displays complete configuration state for manual verification
+ * and provides clear pass/fail indication for automated testing.
+ * 
+ * @return 0 on successful completion of all tests, 1 on any test failure
+ */
 int main() {
     dtmf_config_advanced_t config;
     

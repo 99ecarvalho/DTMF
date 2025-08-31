@@ -1,7 +1,28 @@
-/*
- * dtmf_music.c
- *
- * MUSIC algorithm implementation for DTMF detection
+/**
+ * @file dtmf_music.c
+ * @brief Implementation of MUSIC algorithm for high-resolution DTMF detection
+ * 
+ * This file contains the implementation of the Multiple Signal Classification
+ * (MUSIC) algorithm for DTMF detection. MUSIC provides super-resolution
+ * frequency estimation by exploiting the eigenstructure of the signal
+ * covariance matrix to separate signal and noise subspaces.
+ * 
+ * Mathematical foundation:
+ * The MUSIC algorithm is based on the eigendecomposition of the covariance matrix:
+ * R = E[x(n)x^H(n)] = A*P*A^H + σ²I
+ * 
+ * Where:
+ * - R is the covariance matrix
+ * - A is the signal steering matrix
+ * - P is the signal power matrix
+ * - σ² is the noise variance
+ * 
+ * The MUSIC pseudospectrum is computed as:
+ * P_MUSIC(f) = 1 / (e^H(f) * E_n * E_n^H * e(f))
+ * 
+ * Where E_n contains the noise eigenvectors and e(f) is the steering vector
+ * for frequency f. Peaks in the pseudospectrum indicate signal frequencies
+ * with resolution limited only by numerical precision rather than window length.
  */
 
 #include "dtmf_algorithms.h"
@@ -11,6 +32,18 @@
 // MATRIX OPERATIONS
 // =============================================================================
 
+/**
+ * @brief Create and initialize a matrix structure
+ * 
+ * Allocates memory for a matrix with the specified dimensions and initializes
+ * all elements to zero. Used for covariance matrices, eigenvector storage,
+ * and intermediate computations in the MUSIC algorithm.
+ * 
+ * @param matrix Matrix structure to initialize
+ * @param rows Number of matrix rows
+ * @param cols Number of matrix columns
+ * @return DTMF_SUCCESS on success, DTMF_ERROR_MEMORY on allocation failure
+ */
 dtmf_result_t matrix_create(matrix_t *matrix, int rows, int cols) {
     if (!matrix || rows <= 0 || cols <= 0) {
         return DTMF_ERROR_INVALID_PARAM;
@@ -38,6 +71,14 @@ dtmf_result_t matrix_create(matrix_t *matrix, int rows, int cols) {
     return DTMF_SUCCESS;
 }
 
+/**
+ * @brief Destroy matrix and free allocated memory
+ * 
+ * Releases all memory allocated for the matrix structure including
+ * individual rows and the row pointer array. Resets matrix dimensions to zero.
+ * 
+ * @param matrix Matrix structure to destroy
+ */
 void matrix_destroy(matrix_t *matrix) {
     if (matrix && matrix->data) {
         for (int i = 0; i < matrix->rows; i++) {

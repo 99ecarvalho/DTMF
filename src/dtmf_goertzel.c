@@ -1,7 +1,23 @@
-/*
- * dtmf_goertzel.c
- *
- * Goertzel algorithm implementations
+/**
+ * @file dtmf_goertzel.c
+ * @brief Implementation of Goertzel algorithm for selective DTMF frequency detection
+ * 
+ * This file contains implementations of the Goertzel algorithm, a computationally
+ * efficient method for detecting specific frequencies in a signal. Unlike FFT
+ * which computes the entire frequency spectrum, Goertzel computes the DFT for
+ * only the frequencies of interest, making it ideal for DTMF detection.
+ * 
+ * Mathematical foundation:
+ * The Goertzel algorithm implements a second-order IIR filter tuned to the
+ * target frequency k:
+ * 
+ * H(z) = 1 / (1 - e^(j*2π*k/N) * z^(-1))
+ * 
+ * The algorithm uses the recurrence relation:
+ * y[n] = x[n] + 2*cos(2π*k/N)*y[n-1] - y[n-2]
+ * 
+ * After processing all samples, the magnitude is computed as:
+ * |X[k]|² = y[N-1]² + y[N-2]² - 2*cos(2π*k/N)*y[N-1]*y[N-2]
  */
 
 #include "dtmf_algorithms.h"
@@ -11,8 +27,10 @@
 // GOERTZEL ALGORITHM CONSTANTS
 // =============================================================================
 
-// DTMF frequency mapping table
+/** @brief DTMF frequency mapping for twist-aware detection */
 static const double DTMF_TWIST_FREQS[8] = {697.0, 770.0, 852.0, 941.0, 1209.0, 1336.0, 1477.0, 1633.0};
+
+/** @brief DTMF keypad mapping for twist-aware detection */
 static const char DTMF_TWIST_TABLE[4][4] = {
     {'1','2','3','A'},
     {'4','5','6','B'}, 
@@ -24,6 +42,28 @@ static const char DTMF_TWIST_TABLE[4][4] = {
 // BASIC GOERTZEL IMPLEMENTATION
 // =============================================================================
 
+/**
+ * @brief Compute magnitude of specific frequency using Goertzel algorithm
+ * 
+ * Implements the classic Goertzel algorithm to detect the magnitude of a
+ * target frequency in a signal. Uses a second-order IIR filter structure
+ * that resonates at the target frequency, providing efficient detection
+ * without computing the full frequency spectrum.
+ * 
+ * Algorithm steps:
+ * 1. Calculate normalized frequency k and resonant coefficient
+ * 2. Apply recursive filter: y[n] = coeff*y[n-1] - y[n-2] + x[n]
+ * 3. Compute complex magnitude from final filter states
+ * 
+ * Computational complexity: O(N) vs O(N log N) for FFT
+ * Memory complexity: O(1) vs O(N) for FFT
+ * 
+ * @param samples Input audio samples (16-bit signed integers)
+ * @param sample_count Number of samples to process
+ * @param sample_rate Sampling rate in Hz
+ * @param target_frequency Frequency to detect in Hz
+ * @return Magnitude of the target frequency component, 0.0 on error
+ */
 double goertzel_magnitude(const int16_t *samples, 
                          size_t sample_count,
                          double sample_rate, 
@@ -54,12 +94,39 @@ double goertzel_magnitude(const int16_t *samples,
 // GOERTZEL WITH TWIST DETECTION
 // =============================================================================
 
-// Helper function to find nearest Goertzel bin
+/**
+ * @brief Find nearest DFT bin for Goertzel algorithm
+ * 
+ * Calculates the nearest DFT bin index for a target frequency to minimize
+ * spectral leakage in Goertzel detection. Uses rounding to find the closest
+ * integer frequency bin.
+ * 
+ * @param N Frame length (number of samples)
+ * @param fs Sampling rate in Hz
+ * @param frequency Target frequency in Hz
+ * @return Nearest DFT bin index
+ */
 static int nearest_goertzel_bin(int N, int fs, double frequency) {
     double k_exact = (double)N * frequency / (double)fs;
     return (int)round(k_exact);
 }
 
+/**
+ * @brief Initialize Goertzel twist detector with DTMF frequencies
+ * 
+ * Sets up a Goertzel detector optimized for DTMF detection with twist
+ * measurement capabilities. Pre-computes coefficients for all 8 DTMF
+ * frequencies to enable efficient batch processing and twist analysis.
+ * 
+ * The twist detector enables measurement of amplitude differences between
+ * row and column frequencies, which is important for telephony standards
+ * compliance and noise robustness.
+ * 
+ * @param detector Twist detector structure to initialize
+ * @param sample_rate Audio sampling rate in Hz
+ * @param frame_length Number of samples per analysis frame
+ * @return DTMF_SUCCESS on success, DTMF_ERROR_INVALID_PARAM on invalid input
+ */
 dtmf_result_t init_goertzel_twist(dtmf_goertzel_twist_t *detector, 
                                  int sample_rate, int frame_length) {
     if (!detector || sample_rate <= 0 || frame_length <= 0) {
@@ -79,7 +146,18 @@ dtmf_result_t init_goertzel_twist(dtmf_goertzel_twist_t *detector,
     return DTMF_SUCCESS;
 }
 
-// Compute power using Goertzel algorithm (returns magnitude squared)
+/**
+ * @brief Compute power using Goertzel algorithm
+ * 
+ * Calculates the power (magnitude squared) at a specific frequency using
+ * the Goertzel algorithm. Returns power instead of magnitude to avoid
+ * expensive square root operation when only relative comparisons are needed.
+ * 
+ * @param samples Input audio samples
+ * @param N Number of samples
+ * @param coeff Pre-computed Goertzel coefficient (2*cos(2π*k/N))
+ * @return Power (magnitude squared) at the target frequency
+ */
 static double goertzel_power(const int16_t *samples, int N, double coeff) {
     double s0 = 0.0, s1 = 0.0, s2 = 0.0;
     
@@ -93,7 +171,17 @@ static double goertzel_power(const int16_t *samples, int N, double coeff) {
     return s1 * s1 + s2 * s2 - coeff * s1 * s2;
 }
 
-// Calculate total frame energy for normalization
+/**
+ * @brief Calculate total frame energy for normalization
+ * 
+ * Computes the total energy (sum of squares) of the input frame for
+ * signal normalization and threshold comparison. Used to determine
+ * if the signal level is sufficient for reliable DTMF detection.
+ * 
+ * @param samples Input audio samples
+ * @param N Number of samples
+ * @return Total energy of the frame
+ */
 static double calculate_frame_energy(const int16_t *samples, int N) {
     double energy = 0.0;
     for (int i = 0; i < N; i++) {
@@ -103,6 +191,23 @@ static double calculate_frame_energy(const int16_t *samples, int N) {
     return energy;
 }
 
+/**
+ * @brief Process audio frame with twist analysis using Goertzel algorithm
+ * 
+ * Performs comprehensive DTMF detection using Goertzel algorithm with twist
+ * measurement. Computes power for all 8 DTMF frequencies, identifies the
+ * strongest row and column frequencies, measures twist (amplitude ratio),
+ * and validates detection criteria.
+ * 
+ * Twist measurement is important for telephony compliance:
+ * - Normal twist: column > row (typical in phone systems)
+ * - Reverse twist: row > column (less common)
+ * - Standard allows up to 8 dB twist in either direction
+ * 
+ * @param detector Initialized Goertzel twist detector
+ * @param samples Input audio samples for one frame
+ * @return Structure containing detected key, twist measurements, and powers
+ */
 dtmf_twist_result_t process_frame_with_twist(const dtmf_goertzel_twist_t *detector, 
                                             const int16_t *samples) {
     dtmf_twist_result_t result = {0};
