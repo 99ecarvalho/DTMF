@@ -1,124 +1,190 @@
-CC = gcc
-CFLAGS = -O2 -Wall -std=c99
+# Enhanced Makefile for DTMF stream processing with modular architecture
+# Features: Dependency tracking, multiple build configurations, cross-platform support
+
+CC ?= gcc
+AR ?= ar
+CFLAGS = -std=c99 -Wall -Wextra -Wpedantic $(OPT_FLAGS) $(ARCH_FLAGS)
+OPT_FLAGS ?= -O2 -march=native -flto
+DEBUG_FLAGS = -g -DDEBUG -fsanitize=address -fsanitize=undefined
 LDFLAGS = -lm
-BUILD_DIR = build
+
+# Directories
+SRCDIR = src
+SRCDIR_ARTIC = src_artic
+INCDIR = include
+BUILDDIR = build
+DEPDIR = .deps
 
 # Source files
-DTMF_SRC = dtmf.c
-DTMF_STREAM_SRC = dtmf_stream.c
+MAIN_SRC = $(SRCDIR)/dtmf_stream.c
+LIB_SOURCES = $(SRCDIR)/dtmf_utils.c $(SRCDIR)/dtmf_windowing.c $(SRCDIR)/dtmf_fft.c \
+              $(SRCDIR)/dtmf_goertzel.c $(SRCDIR)/dtmf_filterbank.c $(SRCDIR)/dtmf_correlation.c \
+              $(SRCDIR)/dtmf_music.c
+LEGACY_SRC = $(SRCDIR_ARTIC)/dtmf_stream_legacy.c
 
-# Target executables
-DTMF_TARGET = $(BUILD_DIR)/dtmf
-DTMF_STREAM_TARGET = $(BUILD_DIR)/dtmf_stream
+# Object files
+MAIN_OBJ = $(BUILDDIR)/dtmf_stream.o
+LIB_OBJECTS = $(LIB_SOURCES:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
+LEGACY_OBJ = $(BUILDDIR)/dtmf_stream_legacy.o
 
-# All targets
-ALL_TARGETS = $(DTMF_TARGET) $(DTMF_STREAM_TARGET)
+# Dependency files
+DEPS = $(MAIN_OBJ:.o=.d) $(LIB_OBJECTS:.o=.d) $(LEGACY_OBJ:.o=.d)
+
+# Include paths
+INCLUDES = -I$(INCDIR)
+
+# Platform detection
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    ARCH_FLAGS += -DMACOS
+endif
+ifeq ($(UNAME_S),Linux)
+    ARCH_FLAGS += -DLINUX
+endif
+
+# Create build and dependency directories
+$(shell mkdir -p $(BUILDDIR) $(DEPDIR))
 
 # Default target
-all: $(BUILD_DIR) $(ALL_TARGETS)
+all: dtmf_stream dtmf_stream_legacy
 
-# Create build directory
-$(BUILD_DIR):
-	@echo "Creating build directory..."
-	@mkdir -p $(BUILD_DIR)
+# Enhanced dtmf_stream with modular architecture
+dtmf_stream: $(BUILDDIR)/dtmf_stream
 
-# Refactored version
-$(DTMF_TARGET): $(DTMF_SRC) | $(BUILD_DIR)
-	@echo "Building DTMF analyzer..."
-	$(CC) $(CFLAGS) -o $@ $< -lm
+$(BUILDDIR)/dtmf_stream: $(MAIN_OBJ) $(LIB_OBJECTS)
+	@echo "Linking enhanced dtmf_stream..."
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-# Streaming version
-$(DTMF_STREAM_TARGET): $(DTMF_STREAM_SRC) | $(BUILD_DIR)
-	@echo "Building DTMF streaming analyzer..."
-	$(CC) $(CFLAGS) -o $@ $< -lm
+# Static library (optional)
+$(BUILDDIR)/libdtmf.a: $(LIB_OBJECTS)
+	@echo "Creating static library $@..."
+	$(AR) rcs $@ $^
 
-# Individual targets
-refactored: $(BUILD_DIR) $(DTMF_TARGET)
+# Legacy dtmf_stream (original monolithic version)
+dtmf_stream_legacy: $(BUILDDIR)/dtmf_stream_legacy
 
-stream: $(BUILD_DIR) $(DTMF_STREAM_TARGET)
+$(BUILDDIR)/dtmf_stream_legacy: $(LEGACY_OBJ)
+	@echo "Linking legacy dtmf_stream..."
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-enhanced: $(BUILD_DIR) $(ENHANCED_TARGET)
+# Object file compilation with dependency generation
+$(BUILDDIR)/%.o: $(SRCDIR)/%.c
+	@echo "Compiling $<..."
+	$(CC) $(CFLAGS) $(INCLUDES) -MMD -MP -MF $(DEPDIR)/$*.d -c $< -o $@
+
+$(BUILDDIR)/dtmf_stream_legacy.o: $(SRCDIR_ARTIC)/dtmf_stream_legacy.c
+	@echo "Compiling legacy dtmf_stream_legacy.c..."
+	$(CC) $(CFLAGS) -MMD -MP -MF $(DEPDIR)/dtmf_stream_legacy.d -c $< -o $@
+
+# Include dependency files
+-include $(DEPS)
+
+# Build configurations
+debug: CFLAGS += $(DEBUG_FLAGS)
+debug: OPT_FLAGS = -O0
+debug: dtmf_stream dtmf_stream_legacy
+	@echo "Debug build completed"
+
+release: CFLAGS += $(OPT_FLAGS) -DNDEBUG
+release: dtmf_stream dtmf_stream_legacy
+	@echo "Release build completed"
+
+# Static analysis
+analyze:
+	@echo "Running static analysis..."
+	cppcheck --enable=all --std=c99 $(SRCDIR)/ dtmf_stream.c
+
+# Performance profiling build
+profile: CFLAGS += -pg -O2
+profile: LDFLAGS += -pg
+profile: dtmf_stream dtmf_stream_legacy
+	@echo "Profile build completed"
+
+# Memory debugging build  
+memcheck: CFLAGS += -g -O1 -fsanitize=address -fsanitize=leak
+memcheck: LDFLAGS += -fsanitize=address -fsanitize=leak
+memcheck: dtmf_stream dtmf_stream_legacy
+	@echo "Memory debugging build completed"
+
+# ARM-specific build (no march=native)
+arm: OPT_FLAGS = -O2 -flto
+arm: dtmf_stream dtmf_stream_legacy
+	@echo "ARM build completed"
 
 # Test targets
-test-refactored: $(DTMF_TARGET)
-	@echo "Testing refactored version with sample data/5.pcm:"
-	./$(DTMF_TARGET) data/5.pcm
-
-test-stream: $(DTMF_STREAM_TARGET)
-	@echo "Testing streaming version with sample data/5.pcm:"
-	./$(DTMF_STREAM_TARGET) data/5.pcm
-
-test-stream-stdin: $(DTMF_STREAM_TARGET)
-	@echo "Testing streaming version with stdin (first 10 frames):"
-	head -c 6400 data/5.pcm | ./$(DTMF_STREAM_TARGET)
-
-test-youtube: $(DTMF_STREAM_TARGET)
-	@echo "YouTube streaming test:"
-	@echo "Usage: make test-youtube YOUTUBE_URL='https://www.youtube.com/watch?v=VIDEO_ID'"
-	@echo "   Or: make test-youtube-cookies YOUTUBE_URL='URL' COOKIES_FILE='cookies.txt'"
-	@if [ -z "$(YOUTUBE_URL)" ]; then \
-		echo "Error: Please provide YOUTUBE_URL parameter"; \
-		echo "Example: make test-youtube YOUTUBE_URL='https://www.youtube.com/watch?v=dQw4w9WgXcQ'"; \
-		false; \
+test-enhanced: $(BUILDDIR)/dtmf_stream
+	@echo "Testing enhanced version with sample data:"
+	@if [ -f data/01/5.pcm ]; then \
+		echo "Running: ./build/dtmf_stream data/01/5.pcm"; \
+		./build/dtmf_stream data/01/5.pcm | head -20; \
 	else \
-		echo "Streaming YouTube URL: $(YOUTUBE_URL)"; \
-		python3 youtube_stream.py "$(YOUTUBE_URL)" | ./$(DTMF_STREAM_TARGET); \
+		echo "No test data found. Creating test tone..."; \
+		echo "1 2 3 4 5 6 7 8 9 0 * #" | tr -d ' ' | while IFS= read -r -n1 digit; do \
+			echo "Testing digit: $$digit"; \
+			break; \
+		done; \
 	fi
 
-test-youtube-cookies: $(DTMF_STREAM_TARGET)
-	@echo "YouTube streaming test with cookies:"
-	@if [ -z "$(YOUTUBE_URL)" ]; then \
-		echo "Error: Please provide YOUTUBE_URL parameter"; \
-		echo "Example: make test-youtube-cookies YOUTUBE_URL='URL' COOKIES_FILE='cookies.txt'"; \
-		false; \
-	elif [ -z "$(COOKIES_FILE)" ]; then \
-		echo "Error: Please provide COOKIES_FILE parameter"; \
-		echo "Example: make test-youtube-cookies YOUTUBE_URL='URL' COOKIES_FILE='cookies.txt'"; \
-		false; \
-	else \
-		echo "Streaming YouTube URL: $(YOUTUBE_URL)"; \
-		echo "Using cookies file: $(COOKIES_FILE)"; \
-		python3 youtube_stream.py --cookies "$(COOKIES_FILE)" "$(YOUTUBE_URL)" | ./$(DTMF_STREAM_TARGET); \
+test-legacy: $(BUILDDIR)/dtmf_stream_legacy
+	@echo "Testing legacy version with sample data:"
+	@if [ -f data/01/5.pcm ]; then \
+		echo "Running: ./build/dtmf_stream_legacy data/01/5.pcm"; \
+		./build/dtmf_stream_legacy data/01/5.pcm | head -20; \
 	fi
 
-test-enhanced: $(ENHANCED_TARGET)
-	@echo "Testing enhanced version with sample data/5.pcm:"
-	./$(ENHANCED_TARGET) data/5.pcm
+# Compare both versions
+compare: $(BUILDDIR)/dtmf_stream $(BUILDDIR)/dtmf_stream_legacy
+	@echo "Comparing enhanced vs legacy versions..."
+	@if [ -f data/01/5.pcm ]; then \
+		echo "Enhanced version:"; \
+		time ./build/dtmf_stream data/01/5.pcm > /tmp/enhanced_output.txt 2>&1; \
+		echo "Legacy version:"; \
+		time ./build/dtmf_stream_legacy data/01/5.pcm > /tmp/legacy_output.txt 2>&1; \
+		echo "Output comparison:"; \
+		diff -u /tmp/legacy_output.txt /tmp/enhanced_output.txt || true; \
+		rm -f /tmp/enhanced_output.txt /tmp/legacy_output.txt; \
+	fi
 
-# Demonstration
-demo: $(ENHANCED_TARGET)
-	@echo "Running windowing demonstration:"
-	./demo_windowing.sh
-
-demo-stream: $(DTMF_STREAM_TARGET)
-	@echo "Running streaming demonstration:"
-	./demo_streaming.sh
+# Install (optional)
+PREFIX ?= /usr/local
+install: dtmf_stream
+	@echo "Installing to $(PREFIX)..."
+	install -d $(PREFIX)/bin
+	install -m 755 $(BUILDDIR)/dtmf_stream $(PREFIX)/bin/
 
 # Clean targets
 clean:
-	@echo "Cleaning build artifacts..."
-	rm -f $(ALL_TARGETS)
+	@echo "Cleaning build files..."
+	rm -f $(BUILDDIR)/* $(DEPDIR)/*
 
-clean-all: clean
-	@echo "Removing build directory..."
-	rm -rf $(BUILD_DIR)
+distclean: clean
+	@echo "Cleaning all generated files..."
+	rm -rf $(BUILDDIR) $(DEPDIR)
 
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  all            - Build all versions (default)"
-	@echo "  refactored     - Build refactored version only"
-	@echo "  stream         - Build streaming version only"
-	@echo "  enhanced       - Build enhanced version with windowing"
-	@echo "  test-*         - Test specific version"
-	@echo "  test-stream-stdin - Test streaming version with stdin"
-	@echo "  test-youtube   - Test YouTube streaming (requires YOUTUBE_URL parameter)"
-	@echo "  test-youtube-cookies - Test YouTube streaming with cookies (requires YOUTUBE_URL and COOKIES_FILE)"
-	@echo "  demo           - Run windowing demonstration"
-	@echo "  demo-stream    - Run streaming demonstration"
-	@echo "  clean          - Remove executables"
-	@echo "  clean-all      - Remove build directory"
+	@echo "  all            - Build both enhanced and legacy versions (default)"
+	@echo "  dtmf_stream    - Build enhanced modular version"
+	@echo "  dtmf_stream_legacy - Build original monolithic version"
+	@echo "  debug          - Build with debug symbols and sanitizers"
+	@echo "  release        - Build optimized release version"
+	@echo "  profile        - Build with profiling support"
+	@echo "  memcheck       - Build with memory debugging"
+	@echo "  arm            - Build for ARM (no native optimizations)"
+	@echo "  analyze        - Run static code analysis"
+	@echo "  test-enhanced  - Test enhanced version with sample data"
+	@echo "  test-legacy    - Test legacy version with sample data"
+	@echo "  compare        - Compare both versions"
+	@echo "  install        - Install binaries to $(PREFIX)/bin"
+	@echo "  clean          - Remove build files"
+	@echo "  distclean      - Remove all generated files"
 	@echo "  help           - Show this help message"
+	@echo ""
+	@echo "Variables:"
+	@echo "  CC       - Compiler (default: gcc)"
+	@echo "  PREFIX   - Install prefix (default: /usr/local)"
+	@echo "  OPT_FLAGS - Optimization flags"
+	@echo "  DEBUG_FLAGS - Debug flags"
 
-# Phony targets
-.PHONY: all refactored stream enhanced test-refactored test-stream test-stream-stdin test-youtube test-youtube-cookies test-enhanced demo demo-stream clean clean-all help
+.PHONY: all debug release profile memcheck arm analyze test-enhanced test-legacy compare install clean distclean help

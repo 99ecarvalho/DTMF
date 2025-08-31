@@ -8,7 +8,7 @@
  * - Operates on 40ms frames (320 samples at 8kHz)
  * - Outputs consolidated results in table format with timestamps
  * - Low latency for near real-time performance
- * - Supports all original algorithms: FFT, Goertzel, Goertzel+Twist, 
+ * - Supports several algorithms: FFT, Goertzel, Goertzel+Twist, 
  *   Filter Bank, Correlation, MUSIC
  *
  * Usage:
