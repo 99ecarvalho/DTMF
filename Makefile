@@ -18,8 +18,8 @@ DEPDIR = .deps
 # Source files
 MAIN_SRC = $(SRCDIR)/dtmf_stream.c
 LIB_SOURCES = $(SRCDIR)/dtmf_utils.c $(SRCDIR)/dtmf_windowing.c $(SRCDIR)/dtmf_fft.c \
-              $(SRCDIR)/dtmf_goertzel.c $(SRCDIR)/dtmf_filterbank.c $(SRCDIR)/dtmf_correlation.c \
-              $(SRCDIR)/dtmf_music.c
+              $(SRCDIR)/dtmf_goertzel.c $(SRCDIR)/dtmf_filterbank.c $(SRCDIR)/dtmf_filterbank_iir.c \
+              $(SRCDIR)/dtmf_correlation.c $(SRCDIR)/dtmf_music.c
 LEGACY_SRC = $(SRCDIR_ARTIC)/dtmf_stream_legacy.c
 TEST_CONFIG_SRC = $(SRCDIR)/test_config_loading.c
 

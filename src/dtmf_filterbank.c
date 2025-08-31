@@ -103,26 +103,36 @@ dtmf_result_t design_bandpass_filter(iir_filter_t *filter,
         return DTMF_ERROR_INVALID_PARAM;
     }
     
-    // Design 2nd order Butterworth bandpass filter
+    // Design 2nd order bandpass filter using biquad design
     dtmf_result_t result = iir_filter_init(filter, 2);
     if (result != DTMF_SUCCESS) {
         return result;
     }
     
-    double omega = 2.0 * M_PI * center_freq / sample_rate;
-    double bw = 2.0 * M_PI * bandwidth / sample_rate;
+    // Calculate filter parameters for biquad bandpass filter
+    double f0 = center_freq / sample_rate;           // Normalized center frequency [0, 0.5]
+    double Q = center_freq / bandwidth;              // Quality factor
+    double omega = 2.0 * M_PI * f0;                  // Angular frequency
+    double alpha = sin(omega) / (2.0 * Q);           // Filter width parameter
+    double cos_omega = cos(omega);
     
-    double r = 1.0 - 3.0 * bw;
-    double cosine = 2.0 * r * cos(omega) / (1.0 + r);
+    // Biquad bandpass filter coefficients
+    // H(z) = (alpha * (1 - z^-2)) / (1 + alpha + alpha * z^-1 + (alpha - 1) * z^-2)
+    double b0 = alpha;
+    double b1 = 0.0;
+    double b2 = -alpha;
+    double a0 = 1.0 + alpha;
+    double a1 = -2.0 * cos_omega;
+    double a2 = 1.0 - alpha;
     
-    // Coefficients for bandpass filter
-    filter->coeffs_b[0] = (1.0 - r) / 2.0;
-    filter->coeffs_b[1] = 0.0;
-    filter->coeffs_b[2] = -(1.0 - r) / 2.0;
+    // Normalize coefficients by a0
+    filter->coeffs_b[0] = b0 / a0;
+    filter->coeffs_b[1] = b1 / a0;
+    filter->coeffs_b[2] = b2 / a0;
     
-    filter->coeffs_a[0] = 1.0;
-    filter->coeffs_a[1] = -cosine;
-    filter->coeffs_a[2] = r;
+    filter->coeffs_a[0] = 1.0;                      // a0 normalized to 1
+    filter->coeffs_a[1] = a1 / a0;
+    filter->coeffs_a[2] = a2 / a0;
     
     return DTMF_SUCCESS;
 }

@@ -231,6 +231,7 @@ typedef struct {
     bool enable_goertzel;        ///< Enable standard Goertzel algorithm
     bool enable_goertzel_twist;  ///< Enable Goertzel with twist compensation
     bool enable_filterbank;      ///< Enable filter bank approach
+    bool enable_filterbank_iir;  ///< Enable IIR filter bank approach
     bool enable_correlation;     ///< Enable correlation-based detection
     bool enable_music;           ///< Enable MUSIC algorithm
     

@@ -319,6 +319,7 @@ int main(int argc, char **argv) {
         {"Goertzel", analyze_goertzel_strategy, config.enable_goertzel},
         {"GoertzelTwist", analyze_goertzel_twist_strategy, config.enable_goertzel_twist},
         {"FilterBank", analyze_filterbank_strategy, config.enable_filterbank},
+        {"FilterBankIIR", analyze_filterbank_iir_strategy, config.enable_filterbank_iir},
         {"Correlation", analyze_correlation_strategy, config.enable_correlation},
         {"MUSIC", analyze_music_strategy, config.enable_music}
     };

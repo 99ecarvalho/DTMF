@@ -368,6 +368,24 @@ dtmf_result_t analyze_filterbank_strategy(const audio_context_t *ctx,
                                           dtmf_analysis_result_t *result);
 
 /**
+ * @brief IIR filter bank approach to DTMF analysis
+ * 
+ * Uses IIR bandpass filters and energy detection to isolate each DTMF frequency component.
+ * Provides real-time processing capabilities with direct time-domain filtering
+ * followed by energy measurement for frequency-selective detection.
+ * 
+ * @param ctx Audio context containing samples
+ * @param config DTMF frequency configuration
+ * @param window_strategy Windowing strategy (not used by IIR filters)
+ * @param result Output structure for detection results
+ * @return DTMF_SUCCESS on success, error code otherwise
+ */
+dtmf_result_t analyze_filterbank_iir_strategy(const audio_context_t *ctx,
+                                              const dtmf_config_t *config,
+                                              const window_strategy_t *window_strategy,
+                                              dtmf_analysis_result_t *result);
+
+/**
  * @brief Cross-correlation based DTMF analysis
  * 
  * Detects DTMF tones by correlating the input signal with reference

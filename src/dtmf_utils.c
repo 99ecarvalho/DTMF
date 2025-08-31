@@ -623,6 +623,7 @@ void get_default_config(dtmf_config_advanced_t *config) {
     config->enable_goertzel = true;
     config->enable_goertzel_twist = true;
     config->enable_filterbank = true;
+    config->enable_filterbank_iir = true;
     config->enable_correlation = true;
     config->enable_music = true;
     
@@ -722,6 +723,8 @@ dtmf_result_t load_config(const char *config_file,
             config->enable_goertzel_twist = (strcmp(value, "true") == 0);
         } else if (strcmp(key, "enable_filterbank") == 0) {
             config->enable_filterbank = (strcmp(value, "true") == 0);
+        } else if (strcmp(key, "enable_filterbank_iir") == 0) {
+            config->enable_filterbank_iir = (strcmp(value, "true") == 0);
         } else if (strcmp(key, "enable_correlation") == 0) {
             config->enable_correlation = (strcmp(value, "true") == 0);
         } else if (strcmp(key, "enable_music") == 0) {
