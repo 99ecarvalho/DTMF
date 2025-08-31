@@ -6,6 +6,7 @@
 
 #include "dtmf_algorithms.h"
 #include "dtmf_utils.h"
+#include <string.h>
 
 // =============================================================================
 // IIR FILTER IMPLEMENTATION
@@ -193,6 +194,10 @@ dtmf_result_t analyze_filterbank_strategy(const audio_context_t *ctx,
     // Calculate energy in frequency bands around each DTMF frequency
     double low_energies[config->num_low_freqs];
     double high_energies[config->num_high_freqs];
+    
+    // Initialize arrays to avoid compiler warnings
+    memset(low_energies, 0, sizeof(low_energies));
+    memset(high_energies, 0, sizeof(high_energies));
     
     const double bandwidth = 100.0; // Hz, energy integration bandwidth
     

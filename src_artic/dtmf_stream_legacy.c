@@ -735,7 +735,7 @@ static dtmf_result_t iir_filter_init(iir_filter_t *filter, int order) {
     return DTMF_SUCCESS;
 }
 
-static void iir_filter_cleanup(iir_filter_t *filter) {
+static void __attribute__((unused)) iir_filter_cleanup(iir_filter_t *filter) {
     if (filter) {
         free(filter->coeffs_b);
         free(filter->coeffs_a);
@@ -745,7 +745,7 @@ static void iir_filter_cleanup(iir_filter_t *filter) {
     }
 }
 
-static dtmf_result_t design_bandpass_filter(iir_filter_t *filter, 
+static dtmf_result_t __attribute__((unused)) design_bandpass_filter(iir_filter_t *filter, 
                                            double center_freq, 
                                            double bandwidth,
                                            double sample_rate) {
@@ -777,7 +777,7 @@ static dtmf_result_t design_bandpass_filter(iir_filter_t *filter,
     return DTMF_SUCCESS;
 }
 
-static double iir_filter_process_sample(iir_filter_t *filter, double input) {
+static double __attribute__((unused)) iir_filter_process_sample(iir_filter_t *filter, double input) {
     if (!filter) return 0.0;
     
     // Shift delay lines
@@ -805,7 +805,7 @@ static double iir_filter_process_sample(iir_filter_t *filter, double input) {
     return output;
 }
 
-static double calculate_rms_energy(const double *samples, size_t count) {
+static double __attribute__((unused)) calculate_rms_energy(const double *samples, size_t count) {
     if (!samples || count == 0) return 0.0;
     
     double sum_squares = 0.0;
@@ -1458,6 +1458,10 @@ static dtmf_result_t analyze_filterbank_strategy(const audio_context_t *ctx,
     double low_energies[config->num_low_freqs];
     double high_energies[config->num_high_freqs];
     
+    // Initialize arrays to avoid compiler warnings
+    memset(low_energies, 0, sizeof(low_energies));
+    memset(high_energies, 0, sizeof(high_energies));
+    
     const double bandwidth = 100.0; // Hz, energy integration bandwidth
     
     for (size_t i = 0; i < config->num_low_freqs; i++) {
@@ -1907,7 +1911,7 @@ int main(int argc, char **argv) {
             const char *algorithm_name;
             const char *window_name;
             
-            if (i < NUM_WINDOW_STRATEGIES) {
+            if (i < (int)NUM_WINDOW_STRATEGIES) {
                 // FFT results
                 algorithm_name = "FFT";
                 window_name = WINDOW_STRATEGIES[i].name;

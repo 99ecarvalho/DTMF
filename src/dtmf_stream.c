@@ -327,7 +327,7 @@ int main(int argc, char **argv) {
             double timing_us = results[i].timing.wall_time_s * 1000000.0;  // Convert to microseconds
             int ms = (int)(timing_us / 1000.0);  // Extract milliseconds
             int us = (int)(timing_us) % 1000;    // Extract remaining microseconds
-            const char *algorithm_name;
+            const char *algorithm_name = "";
             const char *window_name;
             
             if (config.enable_fft && i < (int)NUM_WINDOW_STRATEGIES) {
@@ -336,7 +336,7 @@ int main(int argc, char **argv) {
                 window_name = WINDOW_STRATEGIES[i].name;
             } else {
                 // Other algorithm results  
-                int algo_idx = config.enable_fft ? (i - NUM_WINDOW_STRATEGIES + 1) : i;
+                int algo_idx = config.enable_fft ? (i - (int)NUM_WINDOW_STRATEGIES + 1) : i;
                 
                 // Find the enabled algorithm at this index
                 int enabled_count = 0;
