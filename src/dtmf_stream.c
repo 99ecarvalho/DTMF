@@ -1,29 +1,43 @@
-/*
- * dtmf_stream.c
- *
- * Enhanced Real-time streaming DTMF tone detection system.
+/**
+ * @file dtmf_stream.c
+ * @brief Enhanced real-time streaming DTMF tone detection system
  * 
- * Features:
+ * This is the main program for DTMF (Dual-Tone Multi-Frequency) detection
+ * from audio streams. It provides a modular architecture supporting multiple
+ * detection algorithms with enhanced error handling, performance optimization,
+ * and audio quality validation.
+ * 
+ * ## Supported Algorithms:
+ * - FFT-based analysis with multiple windowing functions
+ * - Standard Goertzel algorithm
+ * - Goertzel with ITU-T twist detection  
+ * - Filter bank approach
+ * - Cross-correlation detection
+ * - MUSIC (Multiple Signal Classification) algorithm
+ * 
+ * ## Features:
  * - Modular architecture with separate algorithm implementations
- * - Enhanced error handling and logging
- * - Memory pool allocation for performance
- * - Audio quality validation
- * - Configuration management
- * - Improved performance with buffer reuse and lookup tables
+ * - Enhanced error handling and comprehensive logging
+ * - Memory pool allocation for reduced latency
+ * - Audio quality validation and preprocessing
+ * - Runtime configuration management
+ * - Performance optimization with lookup tables and buffer reuse
  * 
- * Usage:
- *   # From file:
- *   ./dtmf_stream input.pcm
- *   
- *   # From stdin (streaming):
- *   cat audio.pcm | ./dtmf_stream
- *   arecord -f S16_LE -r 8000 -c 1 | ./dtmf_stream
- *   
- *   # With configuration file:
- *   ./dtmf_stream input.pcm config.conf
- *
- * Build:
- *   make
+ * ## Usage Examples:
+ * ```bash
+ * # Process from file:
+ * ./dtmf_stream input.pcm
+ * 
+ * # Process from stdin (streaming):
+ * cat audio.pcm | ./dtmf_stream -
+ * arecord -f S16_LE -r 8000 -c 1 | ./dtmf_stream -
+ * 
+ * # With custom configuration:
+ * ./dtmf_stream input.pcm config.conf
+ * ```
+ * 
+ * @author DTMF Detection System
+ * @version 2.0 Enhanced
  */
 
 #define _POSIX_C_SOURCE 200809L
@@ -37,6 +51,18 @@
 // STREAM PROCESSING
 // =============================================================================
 
+/**
+ * @brief Initialize stream processing context
+ * 
+ * Sets up the stream context for processing audio from either a file
+ * or standard input. Allocates necessary resources and initializes
+ * the audio processing context.
+ * 
+ * @param stream_ctx Stream context to initialize
+ * @param filename Input filename or "-" for stdin, NULL for stdin
+ * @param config Algorithm configuration to use
+ * @return DTMF_SUCCESS on success, error code on failure
+ */
 static dtmf_result_t stream_init(stream_context_t *stream_ctx, 
                                 const char *filename,
                                 const dtmf_config_advanced_t *config) {
@@ -92,6 +118,14 @@ static dtmf_result_t stream_init(stream_context_t *stream_ctx,
     return DTMF_SUCCESS;
 }
 
+/**
+ * @brief Clean up stream processing context and free all resources
+ * 
+ * Properly closes files, frees allocated memory, and cleans up the
+ * audio processing context. Safe to call multiple times.
+ * 
+ * @param stream_ctx Stream context to clean up (can be NULL)
+ */
 static void stream_cleanup(stream_context_t *stream_ctx) {
     if (!stream_ctx) return;
     
@@ -109,6 +143,17 @@ static void stream_cleanup(stream_context_t *stream_ctx) {
     dtmf_log(LOG_INFO, NULL, "Stream cleanup completed");
 }
 
+/**
+ * @brief Read one frame of audio samples from input stream
+ * 
+ * Reads exactly SAMPLES_PER_FRAME samples from the input stream.
+ * Handles both file input and stdin streams. Updates the audio
+ * context with the current sample count.
+ * 
+ * @param stream_ctx Stream context with initialized input
+ * @return DTMF_SUCCESS on successful read, DTMF_ERROR_END_OF_STREAM when done,
+ *         DTMF_ERROR_INSUFFICIENT_DATA for partial frames
+ */
 static dtmf_result_t stream_read_frame(stream_context_t *stream_ctx) {
     if (!stream_ctx || !stream_ctx->input) {
         return DTMF_ERROR_INVALID_PARAM;
@@ -163,6 +208,12 @@ static dtmf_result_t stream_read_frame(stream_context_t *stream_ctx) {
     return DTMF_SUCCESS;
 }
 
+/**
+ * @brief Print CSV header with system information
+ * 
+ * Outputs a descriptive header for the CSV results including system
+ * capabilities and column definitions. Called once at program start.
+ */
 static void print_header() {
     printf("# Enhanced DTMF Stream Analysis Results\n");
     printf("# Frame: 40ms (320 samples @ 8kHz)\n");
@@ -178,6 +229,14 @@ static void print_header() {
 // MAIN PROCESSING LOOP
 // =============================================================================
 
+/**
+ * @brief Display command-line usage information
+ * 
+ * Shows all available command-line options and usage examples
+ * for the DTMF detection program.
+ * 
+ * @param program_name Name of the program executable
+ */
 static void print_usage(const char *program_name) {
     printf("Usage: %s [input_file] [config_file]\n", program_name);
     printf("\nOptions:\n");
@@ -189,6 +248,26 @@ static void print_usage(const char *program_name) {
     printf("  %s data.pcm config.conf  # Process with config\n", program_name);
 }
 
+/**
+ * @brief Main program entry point
+ * 
+ * Coordinates the entire DTMF detection process from initialization through
+ * cleanup. Handles command-line arguments, configuration loading, stream
+ * processing, and result output.
+ * 
+ * ## Process Flow:
+ * 1. Parse command-line arguments and handle help requests
+ * 2. Load configuration from file or use defaults
+ * 3. Initialize stream processing and audio context
+ * 4. Process audio frames in continuous loop
+ * 5. Run enabled detection algorithms on each frame
+ * 6. Output results in CSV format with timing information
+ * 7. Clean up all resources before exit
+ * 
+ * @param argc Number of command-line arguments
+ * @param argv Array of command-line argument strings
+ * @return 0 on successful completion, non-zero on error
+ */
 int main(int argc, char **argv) {
     const char *filename = (argc > 1) ? argv[1] : "-";
     const char *config_file = (argc > 2) ? argv[2] : NULL;
