@@ -1,0 +1,6 @@
+# DTMF Test Dataset - Auto-generated
+# Generated on Mon Sep  1 08:27:07 AM -03 2025
+# Format: filename_without_extension expected_symbol_sequence
+#
+test_01_fusion_poc_fxs_clipped 3 3 3 1 2 3 4 5 6 7 8 9 0
+
