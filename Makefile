@@ -48,10 +48,26 @@ endif
 $(shell mkdir -p $(BUILDDIR) $(DEPDIR))
 
 # Default target
-all: dtmf_stream dtmf_stream_legacy test_config_loading example01
+all: dtmf_stream dtmf_stream_legacy test_config_loading example01 simple
 # Example usage program
 EXAMPLE_SRC = $(SRCDIR)/example01.c
 EXAMPLE_OBJ = $(BUILDDIR)/example01.o
+
+# Simple HTML/JS port
+SIMPLE_SRC = src_html/simple.c
+SIMPLE_OBJ = $(BUILDDIR)/simple.o
+
+# Build simple
+simple: $(BUILDDIR)/simple
+
+$(BUILDDIR)/simple: $(SIMPLE_OBJ)
+	@echo "Linking simple..."
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Compile simple object
+$(BUILDDIR)/simple.o: $(SIMPLE_SRC)
+	@echo "Compiling simple.c..."
+	$(CC) $(CFLAGS) -MMD -MP -MF $(DEPDIR)/simple.d -c $< -o $@
 
 # Build example01
 example01: $(BUILDDIR)/example01
@@ -161,6 +177,18 @@ test-config: $(BUILDDIR)/test_config_loading
 	@echo "Running: ./build/test_config_loading"
 	./build/test_config_loading
 
+test-simple: $(BUILDDIR)/simple
+	@echo "Testing simple DTMF decoder with sample data:"
+	@if [ -f data/01/5.pcm ]; then \
+		echo "Testing digit 5:"; \
+		cat data/01/5.pcm | ./build/simple; \
+		echo ""; \
+		echo "Testing sequence 1-2-3:"; \
+		cat data/01/1.pcm data/01/2.pcm data/01/3.pcm | ./build/simple; \
+	else \
+		echo "No test data found."; \
+	fi
+
 # Compare both versions
 compare: $(BUILDDIR)/dtmf_stream $(BUILDDIR)/dtmf_stream_legacy
 	@echo "Comparing enhanced vs legacy versions..."
@@ -193,10 +221,12 @@ distclean: clean
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  all            - Build enhanced, legacy, and test_config_loading (default)"
+	@echo "  all            - Build enhanced, legacy, test_config_loading, example01, and simple (default)"
 	@echo "  dtmf_stream    - Build enhanced modular version"
 	@echo "  dtmf_stream_legacy - Build original monolithic version"
 	@echo "  test_config_loading - Build configuration loading test utility"
+	@echo "  example01      - Build comprehensive example program"
+	@echo "  simple         - Build simple HTML/JS port (stdin PCM reader)"
 	@echo "  debug          - Build with debug symbols and sanitizers"
 	@echo "  release        - Build optimized release version"
 	@echo "  profile        - Build with profiling support"
@@ -206,6 +236,7 @@ help:
 	@echo "  test-enhanced  - Test enhanced version with sample data"
 	@echo "  test-legacy    - Test legacy version with sample data"
 	@echo "  test-config    - Test configuration loading functionality"
+	@echo "  test-simple    - Test simple DTMF decoder with sample data"
 	@echo "  compare        - Compare both versions"
 	@echo "  install        - Install binaries to $(PREFIX)/bin"
 	@echo "  clean          - Remove build files"
