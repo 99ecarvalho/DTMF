@@ -357,7 +357,7 @@ static dtmf_result_t example_realtime_simulation(const char *filename) {
     // State for key debouncing
     char last_key = '\0';
     int key_count = 0;
-    const int DEBOUNCE_FRAMES = 4;  // Require 4 consecutive detections
+    const int DEBOUNCE_FRAMES = 3;  // Require 3 consecutive detections
 
     FILE *file = fopen(filename, "rb");
     if (!file) {
@@ -381,6 +381,9 @@ static dtmf_result_t example_realtime_simulation(const char *filename) {
         // Copy samples to context
         memcpy(audio_ctx.samples, samples, sizeof(samples));
         
+        // Calculate frame time in milliseconds for audio editor correlation
+        float frame_time_ms = (float)frame_number * FRAME_MS;
+        
         // Analyze current frame using Goertzel (efficient for real-time)
         dtmf_analysis_result_t analysis_result;
         result = analyze_goertzel_strategy(&audio_ctx, &DEFAULT_DTMF_CONFIG, 
@@ -389,9 +392,10 @@ static dtmf_result_t example_realtime_simulation(const char *filename) {
         if (result == DTMF_SUCCESS) {
             char current_key = analysis_result.detected_key;
             
-            // Always show energy levels for debugging
-            printf("Frame %d: Magnitude L=%.2e H=%.2e LSB ", 
+            // Always show energy levels for debugging with frame time
+            printf("Frame %d (%.1fms): Magnitude L=%.2e H=%.2e LSB ", 
                    frame_number,
+                   frame_time_ms,
                    analysis_result.low_tone.magnitude,
                    analysis_result.high_tone.magnitude);
             
@@ -409,15 +413,15 @@ static dtmf_result_t example_realtime_simulation(const char *filename) {
                 if (current_key != '\0') {
                     key_count++;
                     if (key_count == DEBOUNCE_FRAMES) {
-                        printf("Frame %d: CONFIRMED DTMF key '%c' (debounced after %d frames)\n",
-                               frame_number, current_key, DEBOUNCE_FRAMES);
+                        printf("Frame %d (%.1fms): CONFIRMED DTMF key '%c' (debounced after %d frames)\n",
+                               frame_number, frame_time_ms, current_key, DEBOUNCE_FRAMES);
                     }
                 }
             } else {
                 // Key changed, reset counter
                 if (last_key != '\0' && key_count > 0 && key_count < DEBOUNCE_FRAMES) {
-                    printf("Frame %d: REJECTED key '%c' (only %d/%d frames)\n",
-                           frame_number, last_key, key_count, DEBOUNCE_FRAMES);
+                    printf("Frame %d (%.1fms): REJECTED key '%c' (only %d/%d frames)\n",
+                           frame_number, frame_time_ms, last_key, key_count, DEBOUNCE_FRAMES);
                 }
                 last_key = current_key;
                 key_count = (current_key != '\0') ? 1 : 0;
