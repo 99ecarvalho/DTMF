@@ -512,6 +512,133 @@ static dtmf_result_t example_audio_quality_check(const char *filename) {
 }
 
 /**
+ * @brief Example 6: JavaScript-style change detection
+ * 
+ * This example mimics the JavaScript Goertzel implementation behavior
+ * with change detection and more relaxed thresholds.
+ */
+static dtmf_result_t example_javascript_style_detection(const char *filename) {
+    printf("\n=== Example 6: JavaScript-Style Change Detection ===\n");
+    
+    // Initialize configuration with more relaxed thresholds (like JavaScript)
+    dtmf_config_advanced_t config;
+    get_default_config(&config);  
+    config.energy_threshold = 500.0;  // Lower threshold like JavaScript 0.05
+    
+    audio_context_t audio_ctx;
+    dtmf_result_t result = audio_context_init(&audio_ctx, &config);
+    if (result != DTMF_SUCCESS) {
+        printf("Failed to initialize audio context: %s\n", dtmf_error_string(result));
+        return result;
+    }
+    
+    // Allocate samples buffer manually
+    audio_ctx.samples = malloc(SAMPLES_PER_FRAME * sizeof(int16_t));
+    if (!audio_ctx.samples) {
+        printf("Failed to allocate samples buffer\n");
+        audio_context_cleanup(&audio_ctx);
+        return DTMF_ERROR_MEMORY;
+    }
+
+    // State for change detection (like JavaScript implementation)
+    char last_detected = '?';
+    char decoded_sequence[1000] = {0}; // Store final decoded sequence
+    int sequence_length = 0;
+
+    FILE *file = fopen(filename, "rb");
+    if (!file) {
+        printf("Failed to open file: %s\n", filename);
+        if (audio_ctx.samples) {
+            free(audio_ctx.samples);
+        }
+        audio_context_cleanup(&audio_ctx);
+        return DTMF_ERROR_FILE_IO;
+    }
+    
+    printf("Processing with JavaScript-style change detection...\n");
+    printf("Only outputs when detection changes (filters repeated detections)\n\n");
+    
+    int16_t samples[SAMPLES_PER_FRAME];
+    int frame_number = 0;
+    
+    while (fread(samples, sizeof(int16_t), SAMPLES_PER_FRAME, file) == SAMPLES_PER_FRAME) {
+        // Copy samples to context
+        memcpy(audio_ctx.samples, samples, SAMPLES_PER_FRAME * sizeof(int16_t));
+        audio_ctx.sample_count = SAMPLES_PER_FRAME;
+        
+        // Use the first window strategy (no window)
+        const window_strategy_t *window_strategy = &WINDOW_STRATEGIES[0];
+        
+        // Analyze frame using Goertzel algorithm with relaxed thresholds
+        dtmf_analysis_result_t analysis_result = {0};
+        result = analyze_goertzel_strategy(&audio_ctx, (dtmf_config_t*)&config, window_strategy, &analysis_result);
+        
+        if (result == DTMF_SUCCESS) {
+            char current_key = analysis_result.detected_key;
+            float time_ms = frame_number * 40.0f;
+            
+            // Apply more lenient thresholds (more like JavaScript)
+            char validated_key = '?';
+            if (current_key != '?' && 
+                analysis_result.low_confidence > 0.5 && 
+                analysis_result.high_confidence > 0.5 &&
+                analysis_result.low_tone.magnitude > 5000 &&
+                analysis_result.high_tone.magnitude > 5000) {
+                validated_key = current_key;
+            }
+            
+            // Change detection - only record when detection changes (like JavaScript)
+            if (validated_key != last_detected) {
+                if (validated_key != '?') {
+                    printf("T6 Frame %d (%.1fms): DETECTED CHANGE to '%c' (%.1f Hz + %.1f Hz) Mag L=%.2e H=%.2e\n", 
+                           frame_number, time_ms,
+                           validated_key,
+                           analysis_result.low_tone.frequency,
+                           analysis_result.high_tone.frequency,
+                           analysis_result.low_tone.magnitude,
+                           analysis_result.high_tone.magnitude);
+                    
+                    // Add to sequence if we have room
+                    if (sequence_length < 999) {
+                        decoded_sequence[sequence_length++] = validated_key;
+                    }
+                } else if (last_detected != '?') {
+                    printf("Frame %d (%.1fms): SILENCE (end of tone)\n", frame_number, time_ms);
+                }
+                last_detected = validated_key;
+            }
+        }
+        
+        frame_number++;
+        
+        // Limit frames for demonstration
+        if (frame_number >= 192) {
+            printf("\nLimited to %d frames for demonstration\n", frame_number);
+            break;
+        }
+    }
+    
+    printf("\nDecoded sequence: \"");
+    for (int i = 0; i < sequence_length; i++) {
+        printf("%c", decoded_sequence[i]);
+    }
+    printf("\"\n");
+    printf("Expected sequence: \"3330123456789O\"\n");
+    
+    fclose(file);
+    
+    // Free manually allocated samples buffer
+    if (audio_ctx.samples) {
+        free(audio_ctx.samples);
+        audio_ctx.samples = NULL;
+    }
+    
+    audio_context_cleanup(&audio_ctx);
+    
+    return DTMF_SUCCESS;
+}
+
+/**
  * @brief Print usage information
  */
 static void print_usage(const char *program_name) {
@@ -589,6 +716,11 @@ int main(int argc, char *argv[]) {
     result = example_audio_quality_check(audio_file);
     if (result != DTMF_SUCCESS) {
         printf("Example 5 failed: %s\n", dtmf_error_string(result));
+    }
+    
+    result = example_javascript_style_detection(audio_file);
+    if (result != DTMF_SUCCESS) {
+        printf("Example 6 failed: %s\n", dtmf_error_string(result));
     }
     
     printf("\n=== All Examples Completed ===\n");

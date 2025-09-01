@@ -257,12 +257,13 @@ dtmf_twist_result_t process_frame_with_twist(const dtmf_goertzel_twist_t *detect
         }
     }
     
-    // Detection parameters (ITU-T Q.24 compliant)
+    // Detection parameters (ITU-T Q.24 compliant but adjusted for practical use)
     const double ENERGY_MIN_REL = 0.02;    // Minimum (P_L + P_H) / total_energy
     const double GUARD_RATIO = 5.0;        // Minimum ratio between strongest and second strongest
     const double MIN_ABS_POWER = 1e-6;     // Absolute minimum power threshold
     const double TWIST_MIN_DB = -8.0;      // ITU minimum twist limit (reverse twist tolerance)
     const double TWIST_MAX_DB = 4.0;       // ITU maximum twist limit (forward twist tolerance)
+    const double MIN_SIGNAL_ENERGY = 1e+12; // Minimum total signal power to consider valid (much higher to filter weak spurious signals)
     
     // Calculate total frame energy for VAD
     double total_energy = calculate_frame_energy(samples, detector->N);
@@ -278,6 +279,11 @@ dtmf_twist_result_t process_frame_with_twist(const dtmf_goertzel_twist_t *detect
     // Energy relative to total frame energy (simple VAD)
     double energy_ratio = (power_low + power_high) / total_energy;
     if (energy_ratio < ENERGY_MIN_REL) {
+        return result;
+    }
+    
+    // Add minimum signal energy check to filter out very weak signals
+    if ((power_low + power_high) < MIN_SIGNAL_ENERGY) {
         return result;
     }
     
