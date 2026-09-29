@@ -2,7 +2,7 @@
  * @file simple.c
  * @brief Simple DTMF decoder that reads PCM data from stdin
  * 
- * This program implements a simplified version of the HTML/JavaScript DTMF decoder,
+ * This program implements a simplified version of the DTMF decoder,
  * reading raw PCM audio data from stdin and outputting detected DTMF digits.
  * 
  * Usage: cat audio.pcm | ./simple [threshold]
@@ -32,11 +32,11 @@
 #define NUM_HIGH_FREQS 4
 
 // DTMF frequency definitions
-static const int LOW_FREQS[] = {697, 770, 852, 941};
-static const int HIGH_FREQS[] = {1209, 1336, 1477, 1633};
+static const int low_freqs[] = {697, 770, 852, 941};
+static const int high_freqs[] = {1209, 1336, 1477, 1633};
 
 // DTMF character mapping
-static const char DTMF_TABLE[4][4] = {
+static const char dtmf_table[4][4] = {
     {'1', '2', '3', 'A'},
     {'4', '5', '6', 'B'},
     {'7', '8', '9', 'C'},
@@ -49,33 +49,33 @@ static const char DTMF_TABLE[4][4] = {
 typedef struct {
     double coeff;
     double q1, q2;
-    double totalPower;
-    int sampleCount;
-} GoertzelState;
+    double total_power;
+    int sample_count;
+} goertzel_state_t;
 
 /**
  * @brief DTMF decoder context
  */
 typedef struct {
-    GoertzelState lowFreqStates[NUM_LOW_FREQS];
-    GoertzelState highFreqStates[NUM_HIGH_FREQS];
-    double energyThreshold;
-    int sampleRate;
-} DTMFDecoder;
+    goertzel_state_t low_freq_states[NUM_LOW_FREQS];
+    goertzel_state_t high_freq_states[NUM_HIGH_FREQS];
+    double energy_threshold;
+    int sample_rate;
+} dtmf_decoder_t;
 
 /**
  * @brief Apply exact Blackman window to a sample
  * 
  * @param sample The input sample value
  * @param index Sample index in the buffer
- * @param bufferSize Total buffer size
+ * @param buffer_size Total buffer size
  * @return Windowed sample value
  */
-static double exactBlackmanWindow(double sample, int index, int bufferSize) {
+static double exact_blackman_window(double sample, int index, int buffer_size) {
     return sample * (
         0.426591 -
-        (0.496561 * cos((2.0 * M_PI * index) / bufferSize)) +
-        (0.076849 * cos((4.0 * M_PI * index) / bufferSize))
+        (0.496561 * cos((2.0 * M_PI * index) / buffer_size)) +
+        (0.076849 * cos((4.0 * M_PI * index) / buffer_size))
     );
 }
 
@@ -84,16 +84,16 @@ static double exactBlackmanWindow(double sample, int index, int bufferSize) {
  * 
  * @param state Pointer to Goertzel state structure
  * @param frequency Target frequency in Hz
- * @param sampleRate Sample rate in Hz
+ * @param sample_rate Sample rate in Hz
  */
-static void initGoertzel(GoertzelState *state, int frequency, int sampleRate) {
-    double normalizedFreq = (double)frequency / sampleRate;
-    double omega = 2.0 * M_PI * normalizedFreq;
+static void init_goertzel(goertzel_state_t *state, int frequency, int sample_rate) {
+    double normalized_freq = (double)frequency / sample_rate;
+    double omega = 2.0 * M_PI * normalized_freq;
     state->coeff = 2.0 * cos(omega);
     state->q1 = 0.0;
     state->q2 = 0.0;
-    state->totalPower = 0.0;
-    state->sampleCount = 0;
+    state->total_power = 0.0;
+    state->sample_count = 0;
 }
 
 /**
@@ -102,12 +102,12 @@ static void initGoertzel(GoertzelState *state, int frequency, int sampleRate) {
  * @param state Pointer to Goertzel state structure
  * @param sample Input sample value
  */
-static void processGoertzelSample(GoertzelState *state, double sample) {
+static void process_goertzel_sample(goertzel_state_t *state, double sample) {
     double q0 = sample + (state->coeff * state->q1) - state->q2;
     state->q2 = state->q1;
     state->q1 = q0;
-    state->totalPower += sample * sample;
-    state->sampleCount++;
+    state->total_power += sample * sample;
+    state->sample_count++;
 }
 
 /**
@@ -116,15 +116,15 @@ static void processGoertzelSample(GoertzelState *state, double sample) {
  * @param state Pointer to Goertzel state structure
  * @return Normalized energy value
  */
-static double getGoertzelEnergy(GoertzelState *state) {
-    if (state->totalPower == 0.0) {
-        state->totalPower = 1.0;  // Avoid division by zero
+static double get_goertzel_energy(goertzel_state_t *state) {
+    if (state->total_power == 0.0) {
+        state->total_power = 1.0;  // Avoid division by zero
     }
     
     double power = (state->q2 * state->q2) + (state->q1 * state->q1) - 
                    (state->coeff * state->q1 * state->q2);
     
-    return power / state->totalPower / state->sampleCount;
+    return power / state->total_power / state->sample_count;
 }
 
 /**
@@ -132,11 +132,11 @@ static double getGoertzelEnergy(GoertzelState *state) {
  * 
  * @param state Pointer to Goertzel state structure
  */
-static void resetGoertzel(GoertzelState *state) {
+static void reset_goertzel(goertzel_state_t *state) {
     state->q1 = 0.0;
     state->q2 = 0.0;
-    state->totalPower = 0.0;
-    state->sampleCount = 0;
+    state->total_power = 0.0;
+    state->sample_count = 0;
 }
 
 /**
@@ -144,20 +144,20 @@ static void resetGoertzel(GoertzelState *state) {
  * 
  * @param decoder Pointer to decoder structure
  * @param threshold Energy threshold for detection
- * @param sampleRate Audio sample rate
+ * @param sample_rate Audio sample rate
  */
-static void initDTMFDecoder(DTMFDecoder *decoder, double threshold, int sampleRate) {
-    decoder->energyThreshold = threshold;
-    decoder->sampleRate = sampleRate;
+static void init_dtmf_decoder(dtmf_decoder_t *decoder, double threshold, int sample_rate) {
+    decoder->energy_threshold = threshold;
+    decoder->sample_rate = sample_rate;
     
     // Initialize low frequency Goertzel filters
     for (int i = 0; i < NUM_LOW_FREQS; i++) {
-        initGoertzel(&decoder->lowFreqStates[i], LOW_FREQS[i], sampleRate);
+        init_goertzel(&decoder->low_freq_states[i], low_freqs[i], sample_rate);
     }
     
     // Initialize high frequency Goertzel filters
     for (int i = 0; i < NUM_HIGH_FREQS; i++) {
-        initGoertzel(&decoder->highFreqStates[i], HIGH_FREQS[i], sampleRate);
+        init_goertzel(&decoder->high_freq_states[i], high_freqs[i], sample_rate);
     }
 }
 
@@ -166,66 +166,66 @@ static void initDTMFDecoder(DTMFDecoder *decoder, double threshold, int sampleRa
  * 
  * @param decoder Pointer to initialized decoder
  * @param buffer Array of audio samples (16-bit PCM)
- * @param bufferSize Number of samples in buffer
+ * @param buffer_size Number of samples in buffer
  * @return Detected DTMF character or '\0' if none detected
  */
-static char processBuffer(DTMFDecoder *decoder, const int16_t *buffer, int bufferSize) {
+static char process_buffer(dtmf_decoder_t *decoder, const int16_t *buffer, int buffer_size) {
     // Reset all Goertzel states
     for (int i = 0; i < NUM_LOW_FREQS; i++) {
-        resetGoertzel(&decoder->lowFreqStates[i]);
+        reset_goertzel(&decoder->low_freq_states[i]);
     }
     for (int i = 0; i < NUM_HIGH_FREQS; i++) {
-        resetGoertzel(&decoder->highFreqStates[i]);
+        reset_goertzel(&decoder->high_freq_states[i]);
     }
     
     // Process each sample through all filters
-    for (int sampleIdx = 0; sampleIdx < bufferSize; sampleIdx++) {
+    for (int sample_idx = 0; sample_idx < buffer_size; sample_idx++) {
         // Convert to normalized float and apply windowing
-        double sample = (double)buffer[sampleIdx] / 32768.0;
-        double windowedSample = exactBlackmanWindow(sample, sampleIdx, bufferSize);
+        double sample = (double)buffer[sample_idx] / 32768.0;
+        double windowed_sample = exact_blackman_window(sample, sample_idx, buffer_size);
         
         // Process through low frequency filters
         for (int i = 0; i < NUM_LOW_FREQS; i++) {
-            processGoertzelSample(&decoder->lowFreqStates[i], windowedSample);
+            process_goertzel_sample(&decoder->low_freq_states[i], windowed_sample);
         }
         
         // Process through high frequency filters
         for (int i = 0; i < NUM_HIGH_FREQS; i++) {
-            processGoertzelSample(&decoder->highFreqStates[i], windowedSample);
+            process_goertzel_sample(&decoder->high_freq_states[i], windowed_sample);
         }
     }
     
     // Find strongest low frequency
-    int bestLowIdx = -1;
-    double maxLowEnergy = 0.0;
+    int best_low_idx = -1;
+    double max_low_energy = 0.0;
     for (int i = 0; i < NUM_LOW_FREQS; i++) {
-        double energy = getGoertzelEnergy(&decoder->lowFreqStates[i]);
-        if (energy > maxLowEnergy && energy >= decoder->energyThreshold) {
-            maxLowEnergy = energy;
-            bestLowIdx = i;
+        double energy = get_goertzel_energy(&decoder->low_freq_states[i]);
+        if (energy > max_low_energy && energy >= decoder->energy_threshold) {
+            max_low_energy = energy;
+            best_low_idx = i;
         }
     }
     
-    if (bestLowIdx == -1) {
+    if (best_low_idx == -1) {
         return '\0';  // No low frequency detected
     }
     
     // Find strongest high frequency
-    int bestHighIdx = -1;
-    double maxHighEnergy = 0.0;
+    int best_high_idx = -1;
+    double max_high_energy = 0.0;
     for (int i = 0; i < NUM_HIGH_FREQS; i++) {
-        double energy = getGoertzelEnergy(&decoder->highFreqStates[i]);
-        if (energy > maxHighEnergy && energy >= decoder->energyThreshold) {
-            maxHighEnergy = energy;
-            bestHighIdx = i;
+        double energy = get_goertzel_energy(&decoder->high_freq_states[i]);
+        if (energy > max_high_energy && energy >= decoder->energy_threshold) {
+            max_high_energy = energy;
+            best_high_idx = i;
         }
     }
     
-    if (bestHighIdx == -1) {
+    if (best_high_idx == -1) {
         return '\0';  // No high frequency detected
     }
     
-    return DTMF_TABLE[bestLowIdx][bestHighIdx];
+    return dtmf_table[best_low_idx][best_high_idx];
 }
 
 /**
@@ -245,61 +245,62 @@ int main(int argc, char *argv[]) {
     }
     
     printf("DTMF Decoder - reading PCM from stdin\n");
+    printf("(C) 2025 Eduardo Correia\n");
     printf("Sample rate: %d Hz, Buffer size: %d samples, Threshold: %.3f\n", 
            SAMPLE_RATE, BUFFER_SIZE, threshold);
     printf("Press Ctrl+C to stop\n\n");
     
-    DTMFDecoder decoder;
-    initDTMFDecoder(&decoder, threshold, SAMPLE_RATE);
+    dtmf_decoder_t decoder;
+    init_dtmf_decoder(&decoder, threshold, SAMPLE_RATE);
     
     int16_t buffer[BUFFER_SIZE];
-    char prevChar = '\0';
+    char prev_char = '\0';
     char decoded[1024] = "";
-    int decodedLen = 0;
-    int frameCount = 0;
-    int secondCount = 1;
+    int decoded_len = 0;
+    int frame_count = 0;
+    int second_count = 1;
     
     printf("1s ");
     
     while (1) {
         // Read one frame of PCM data
-        size_t bytesRead = fread(buffer, sizeof(int16_t), BUFFER_SIZE, stdin);
+        size_t bytes_read = fread(buffer, sizeof(int16_t), BUFFER_SIZE, stdin);
         
-        if (bytesRead == 0) {
+        if (bytes_read == 0) {
             if (feof(stdin)) {
                 break;  // End of input
             }
             continue;  // Keep trying
         }
         
-        if (bytesRead < BUFFER_SIZE) {
+        if (bytes_read < BUFFER_SIZE) {
             // Pad with zeros if incomplete frame
-            memset(&buffer[bytesRead], 0, (BUFFER_SIZE - bytesRead) * sizeof(int16_t));
+            memset(&buffer[bytes_read], 0, (BUFFER_SIZE - bytes_read) * sizeof(int16_t));
         }
         
         // Process the buffer
-        char currentChar = processBuffer(&decoder, buffer, BUFFER_SIZE);
+        char current_char = process_buffer(&decoder, buffer, BUFFER_SIZE);
         
         // Output detection result
-        if (currentChar != '\0') {
-            printf("%c", currentChar);
+        if (current_char != '\0') {
+            printf("%c", current_char);
             
             // Add to decoded string if different from previous
-            if (currentChar != prevChar && decodedLen < (int)(sizeof(decoded) - 1)) {
-                decoded[decodedLen++] = currentChar;
-                decoded[decodedLen] = '\0';
+            if (current_char != prev_char && decoded_len < (int)(sizeof(decoded) - 1)) {
+                decoded[decoded_len++] = current_char;
+                decoded[decoded_len] = '\0';
             }
         } else {
             printf(".");
         }
         
-        prevChar = currentChar;
-        frameCount++;
+        prev_char = current_char;
+        frame_count++;
         
         // Print newline every second (25 frames at 40ms each = 1 second)
-        if (frameCount % 25 == 0) {
-            secondCount++;
-            printf("\n%ds ", secondCount);
+        if (frame_count % 25 == 0) {
+            second_count++;
+            printf("\n%ds ", second_count);
         }
         
         fflush(stdout);

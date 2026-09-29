@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script to build and run Doxygen documentation generation using Docker
-# Usage: ./run_doxygen.sh [--clean]
+# Usage: ./docs_create.sh [--clean]
 # Options:
 #   --clean    Remove existing docs directory before generating new documentation
 #   --docbook-to FORMAT  Convert DocBook to additional formats:

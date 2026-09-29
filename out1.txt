@@ -1,0 +1,136 @@
+======================================
+DTMF Algorithm Accuracy Comparison
+Dataset: data/audiocheck.net
+Loading test data from data/audiocheck.net/data.txt...
+
+Filename | Algorithm      | Expected | Result | Status
+---------|----------------|----------|--------|--------
+
+       1 | FFT            |        1 |      1 | OK
+       1 | Goertzel       |        1 |      1 | OK
+       1 | GoertzelTwist  |        1 |      1 | OK
+       1 | FilterBank     |        1 |      1 | OK
+       1 | Correlation    |        1 |      1 | OK
+       1 | MUSIC          |        1 |      1 | OK
+
+       2 | FFT            |        2 |      2 | OK
+       2 | Goertzel       |        2 |      2 | OK
+       2 | GoertzelTwist  |        2 |      2 | OK
+       2 | FilterBank     |        2 |      2 | OK
+       2 | Correlation    |        2 |      2 | OK
+       2 | MUSIC          |        2 |      2 | OK
+
+       3 | FFT            |        3 |      3 | OK
+       3 | Goertzel       |        3 |      3 | OK
+       3 | GoertzelTwist  |        3 |      3 | OK
+       3 | FilterBank     |        3 |      3 | OK
+       3 | Correlation    |        3 |      3 | OK
+       3 | MUSIC          |        3 |      3 | OK
+
+       4 | FFT            |        4 |      4 | OK
+       4 | Goertzel       |        4 |      4 | OK
+       4 | GoertzelTwist  |        4 |      4 | OK
+       4 | FilterBank     |        4 |      4 | OK
+       4 | Correlation    |        4 |      4 | OK
+       4 | MUSIC          |        4 |      4 | OK
+
+       5 | FFT            |        5 |      5 | OK
+       5 | Goertzel       |        5 |      5 | OK
+       5 | GoertzelTwist  |        5 |      5 | OK
+       5 | FilterBank     |        5 |      5 | OK
+       5 | Correlation    |        5 |      5 | OK
+       5 | MUSIC          |        5 |      5 | OK
+
+       6 | FFT            |        6 |      6 | OK
+       6 | Goertzel       |        6 |      6 | OK
+       6 | GoertzelTwist  |        6 |      6 | OK
+       6 | FilterBank     |        6 |      6 | OK
+       6 | Correlation    |        6 |      6 | OK
+       6 | MUSIC          |        6 |      6 | OK
+
+       7 | FFT            |        7 |      7 | OK
+       7 | Goertzel       |        7 |      7 | OK
+       7 | GoertzelTwist  |        7 |      7 | OK
+       7 | FilterBank     |        7 |      7 | OK
+       7 | Correlation    |        7 |      7 | OK
+       7 | MUSIC          |        7 |      7 | OK
+
+       8 | FFT            |        8 |      8 | OK
+       8 | Goertzel       |        8 |      8 | OK
+       8 | GoertzelTwist  |        8 |      8 | OK
+       8 | FilterBank     |        8 |      8 | OK
+       8 | Correlation    |        8 |      8 | OK
+       8 | MUSIC          |        8 |      8 | OK
+
+       9 | FFT            |        9 |      9 | OK
+       9 | Goertzel       |        9 |      9 | OK
+       9 | GoertzelTwist  |        9 |      9 | OK
+       9 | FilterBank     |        9 |      9 | OK
+       9 | Correlation    |        9 |      9 | OK
+       9 | MUSIC          |        9 |      9 | OK
+
+       A | FFT            |        A |      A | OK
+       A | Goertzel       |        A |      A | OK
+       A | GoertzelTwist  |        A |      A | OK
+       A | FilterBank     |        A |      A | OK
+       A | Correlation    |        A |      A | OK
+       A | MUSIC          |        A |      A | OK
+
+       B | FFT            |        B |      B | OK
+       B | Goertzel       |        B |      B | OK
+       B | GoertzelTwist  |        B |      B | OK
+       B | FilterBank     |        B |      B | OK
+       B | Correlation    |        B |      B | OK
+       B | MUSIC          |        B |      B | OK
+
+       C | FFT            |        C |      C | OK
+       C | Goertzel       |        C |      C | OK
+       C | GoertzelTwist  |        C |      C | OK
+       C | FilterBank     |        C |      C | OK
+       C | Correlation    |        C |      C | OK
+       C | MUSIC          |        C |      C | OK
+
+       D | FFT            |        D |      D | OK
+       D | Goertzel       |        D |      D | OK
+       D | GoertzelTwist  |        D |      D | OK
+       D | FilterBank     |        D |      D | OK
+       D | Correlation    |        D |      D | OK
+       D | MUSIC          |        D |      D | OK
+
+   pound | FFT            |        # |      # | OK
+   pound | Goertzel       |        # |      # | OK
+   pound | GoertzelTwist  |        # |      # | OK
+   pound | FilterBank     |        # |      # | OK
+   pound | Correlation    |        # |      # | OK
+   pound | MUSIC          |        # |      # | OK
+
+    star | FFT            |        * |      * | OK
+    star | Goertzel       |        * |      * | OK
+    star | GoertzelTwist  |        * |      * | OK
+    star | FilterBank     |        * |      * | OK
+    star | Correlation    |        * |      * | OK
+    star | MUSIC          |        * |      * | OK
+
+======================================
+ACCURACY SUMMARY
+
+Algorithm      | Correct | Total | Accuracy
+---------------|---------|-------|----------
+FFT            |      16 |    16 |  100.0%
+Goertzel       |      16 |    16 |  100.0%
+GoertzelTwist  |      16 |    16 |  100.0%
+FilterBank     |      16 |    16 |  100.0%
+Correlation    |      16 |    16 |  100.0%
+MUSIC          |      16 |    16 |  100.0%
+
+======================================
+ALGORITHM RANKING (by accuracy)
+
+Rank | Algorithm      | Accuracy
+-----|----------------|----------
+   1 | MUSIC          |  100.0%
+   2 | GoertzelTwist  |  100.0%
+   3 | Goertzel       |  100.0%
+   4 | FilterBank     |  100.0%
+   5 | FFT            |  100.0%
+   6 | Correlation    |  100.0%
