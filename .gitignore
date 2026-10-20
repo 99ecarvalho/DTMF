@@ -77,3 +77,6 @@ gmon.out
 *.asan
 data/charles/Initial testing of the Car Modul_917f75fe6cc145fc9b2db56d0b9bf9b7-150925-0533-2.pdf
 data/charles/Initial+testing+of+the+Car+Module+FXS+Interface.doc
+
+# Browser cookies (secrets)
+cookies.txt
